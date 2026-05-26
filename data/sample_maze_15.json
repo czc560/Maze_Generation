@@ -1,0 +1,63 @@
+{
+  "size": 15,
+  "algorithm": "dfs",
+  "seed": 42,
+  "maze": [
+    "###############",
+    "#S#.G.T...#..T#",
+    "#.###.###.#T#.#",
+    "#T..#.#.#...#.#",
+    "###.#.#G#####.#",
+    "#.#.#.#.#.G...#",
+    "#.#.#T#.#.###.#",
+    "#.#.#.#.#.#...#",
+    "#.#.#.#.#.#####",
+    "#.#.#.#G#.#GG.#",
+    "#.#T#.#G#.#.#G#",
+    "#...#...#...#.#",
+    "#.###########.#",
+    "#.......B....E#",
+    "###############"
+  ],
+  "metadata": {
+    "visited_cells": 49,
+    "runtime_seconds": 0.000945,
+    "space_estimate_cells": 225,
+    "generation_steps": 49,
+    "coin_count": 8,
+    "trap_count": 6,
+    "boss_position": [
+      13,
+      8
+    ],
+    "resource_seed": 42
+  },
+  "validation": {
+    "valid": true,
+    "size_ok": true,
+    "single_start": true,
+    "single_end": true,
+    "single_boss": true,
+    "start_to_end_reachable": true,
+    "all_paths_connected": true,
+    "all_special_cells_reachable": true,
+    "is_perfect_maze": true,
+    "path_cells": 97,
+    "wall_cells": 128,
+    "dead_ends": 5,
+    "branches": 3,
+    "message": "迷宫合法"
+  },
+  "metrics": {
+    "path_cells": 97,
+    "wall_cells": 128,
+    "dead_ends": 5,
+    "branches": 3,
+    "coins": 8,
+    "traps": 6,
+    "bosses": 1,
+    "shortest_path_length": 28,
+    "grid_size": 15
+  },
+  "generation_steps_count": 49
+}

@@ -1,0 +1,100 @@
+{
+  "default_size": 15,
+  "default_seed": 42,
+  "default_algorithm": "dfs",
+  "coin_count": 10,
+  "trap_count": 8,
+  "boss_config": {
+    "B": [
+      11,
+      13,
+      9,
+      15
+    ],
+    "BossAbilities": [
+      {
+        "name": "重击",
+        "damage": 8,
+        "cooldown": 3
+      },
+      {
+        "name": "护盾",
+        "shield": 5,
+        "cooldown": 4
+      }
+    ],
+    "PlayerSkills": [
+      {
+        "name": "普通攻击",
+        "damage": 2,
+        "cooldown": 0,
+        "cost": 0
+      },
+      {
+        "name": "火球术",
+        "damage": 8,
+        "cooldown": 4,
+        "cost": 2
+      },
+      {
+        "name": "连击",
+        "damage": 4,
+        "cooldown": 2,
+        "cost": 1
+      },
+      {
+        "name": "斩击",
+        "damage": 6,
+        "cooldown": 3,
+        "cost": 1
+      }
+    ],
+    "OldFormatExample": {
+      "B": [
+        11,
+        13,
+        9,
+        15
+      ],
+      "PlayerSkills": [
+        [
+          8,
+          4
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          6,
+          3
+        ]
+      ],
+      "minRouds": 20,
+      "CoinConsumption": 5
+    },
+    "minRouds": 20,
+    "CoinConsumption": 5,
+    "PlayerCoin": 30,
+    "PlayerHP": 100
+  },
+  "ai": {
+    "default_strategy": "greedy",
+    "available": [
+      "greedy",
+      "ppo",
+      "qlearning",
+      "custom"
+    ]
+  },
+  "ui": {
+    "cell_size": 28,
+    "fps": 30,
+    "show_loading_animation": true,
+    "show_start_path_flash": true
+  }
+}
