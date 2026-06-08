@@ -110,10 +110,44 @@ class AssetManager:
                 self._font_cache[cache_key] = font
                 return font
 
-        # Fall back to system font
-        try:
-            font = pygame.font.SysFont("simhei, arial, microsoftyahei", size)
-        except Exception:
+        # Fall back to system font — try Chinese-capable fonts first.
+        # We test with a pure-CJK string: each Chinese glyph should render at
+        # roughly the font size in pixels.  Latin-only fallback fonts give tiny
+        # widths (tofu boxes), so we require width >= size * len / 3.
+        _CJK_TEST = "迷宫探"
+        _CJK_FONT_CANDIDATES = [
+            "wenquanyimicrohei", "notosanscjksc", "notoserifcjksc",
+            "wqymicrohei", "notosanscjk",
+            "simhei", "microsoftyahei", "arialunicode", "arial",
+        ]
+        font = None
+        for candidate in _CJK_FONT_CANDIDATES:
+            try:
+                f = pygame.font.SysFont(candidate, size)
+                test_surf = f.render(_CJK_TEST, True, (255, 255, 255))
+                # Each Chinese char should be at least size/3 pixels wide
+                min_w = max(4, size * len(_CJK_TEST) // 3)
+                if test_surf.get_width() >= min_w:
+                    font = f
+                    break
+            except Exception:
+                continue
+
+        if font is None:
+            # Last resort: try direct .ttc path
+            _DIRECT_FONT_PATHS = [
+                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            ]
+            for fp in _DIRECT_FONT_PATHS:
+                if os.path.isfile(fp):
+                    try:
+                        font = pygame.font.Font(fp, size)
+                        break
+                    except Exception:
+                        continue
+
+        if font is None:
             font = pygame.font.Font(None, size)
 
         self._font_cache[cache_key] = font

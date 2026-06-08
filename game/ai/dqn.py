@@ -6,15 +6,23 @@ import os
 import random
 from collections import deque
 from dataclasses import dataclass
-from typing import Optional
-
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
+from typing import Any, Optional
 
 from game.maze.symbols import SYMBOLS, COIN_VALUE, TRAP_VALUE
 from game.maze.pathfinding import distance_to_end_map
+
+try:
+    import numpy as np
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
+    np: Any = None  # type: ignore[no-redef]
+    torch: Any = None  # type: ignore[no-redef]
+    nn: Any = None  # type: ignore[no-redef]
+    optim: Any = None  # type: ignore[no-redef]
 
 _DIRECTIONS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 _CELL_ENCODING = {"#": 0, ".": 1, "S": 2, "E": 3, "B": 4, "C": 5, "T": 6}
