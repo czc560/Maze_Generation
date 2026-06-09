@@ -5,7 +5,6 @@ Player: arrow keys / WASD.  AI: press TAB to toggle auto-run (greedy or DQN).
 
 from __future__ import annotations
 
-import math
 import random
 import pygame
 
@@ -86,9 +85,10 @@ class GameplayScene(Scene):
         self._boss_battle_result: dict | None = None
         self._needs_rebuild = True
 
-        # Optimal path
-        self._optimal_result = None
-        self._show_optimal = False
+        # Optimal path — two modes computed, 0=off, 1=free, 2=S→E
+        self._optimal_free = None
+        self._optimal_se = None
+        self._show_optimal = 0
 
     # ========================================================================
     #  Lifecycle
@@ -176,10 +176,11 @@ class GameplayScene(Scene):
 
         self._boss_battle_result = None
 
-        # Compute optimal resource-collection path (tree-DP)
+        # Compute optimal resource-collection path — both free and S→E modes
         from game.maze.optimal_path import compute_optimal_path
-        self._optimal_result = compute_optimal_path(self._maze)
-        self._show_optimal = False
+        self._optimal_free = compute_optimal_path(self._maze, require_end=False)
+        self._optimal_se = compute_optimal_path(self._maze, require_end=True)
+        self._show_optimal = 0
 
     def _init_ai(self) -> None:
         """Create the AI agent based on config."""
@@ -228,7 +229,7 @@ class GameplayScene(Scene):
         elif key == pygame.K_TAB:
             self._ai_active = not self._ai_active
         elif key == pygame.K_o:
-            self._show_optimal = not self._show_optimal
+            self._show_optimal = (self._show_optimal + 1) % 3
         elif key == pygame.K_ESCAPE:
             from game.scenes.pause import PauseScene
             self.manager.push(PauseScene(self.manager))
@@ -254,7 +255,9 @@ class GameplayScene(Scene):
         self.manager.replace(ResultsScene(
             self.manager, maze=self._maze, player=self._player,
             game_rules=self._game_rules, player_lost=player_lost,
-            optimal_result=self._optimal_result,
+            optimal_result=(self._optimal_free if self._show_optimal == 1
+                            else self._optimal_se if self._show_optimal == 2
+                            else self._optimal_free),
         ))
 
     # ========================================================================
@@ -339,7 +342,8 @@ class GameplayScene(Scene):
         even through unexplored areas.  Alpha varies by visibility state:
         visible > explored > unexplored.
         """
-        if not self._show_optimal or self._optimal_result is None:
+        result = self._optimal_free if self._show_optimal == 1 else self._optimal_se
+        if self._show_optimal == 0 or result is None:
             return
         if self._visibility is None:
             return
@@ -347,7 +351,7 @@ class GameplayScene(Scene):
         cs = self._cell_size
 
         # ---- Pass 1: highlight visited cells ----
-        for r, c in self._optimal_result.visited_cells:
+        for r, c in result.visited_cells:
             px = c * cs
             py = r * cs
 
@@ -369,78 +373,34 @@ class GameplayScene(Scene):
             )
             surface.blit(overlay, (px, py))
 
-        # ---- Pass 2: draw directional arrows along the walk ----
-        path = self._optimal_result.path
+        # ---- Pass 2: draw path lines connecting cell centers ----
+        path = result.path
         if len(path) < 2:
             return
 
+        mw = self._maze.cols * cs
+        mh = self._maze.rows * cs
+        line_surf = pygame.Surface((mw, mh), pygame.SRCALPHA)
+        line_width = max(3, cs // 6)
+        half = cs // 2
+
         for i in range(len(path) - 1):
             (r1, c1), (r2, c2) = path[i], path[i + 1]
-            # Determine arrow direction
-            dr, dc = r2 - r1, c2 - c1
 
-            # Midpoint pixel (center of the edge between two cells)
-            cx = (c1 + c2) * cs // 2 + cs // 2
-            cy = (r1 + r2) * cs // 2 + cs // 2
-
-            # Arrow size proportional to cell
-            arrow_sz = max(5, cs // 5)
-
-            # Alpha based on worst visibility of the two cells
-            v1 = self._visibility.is_visible(r1, c1)
-            v2 = self._visibility.is_visible(r2, c2)
-            e1 = self._visibility.is_explored(r1, c1)
-            e2 = self._visibility.is_explored(r2, c2)
-            if v1 or v2:
-                arrow_alpha = 220
-            elif e1 or e2:
-                arrow_alpha = 130
+            v1 = self._visibility.is_visible(r1, c1) or self._visibility.is_visible(r2, c2)
+            e1 = self._visibility.is_explored(r1, c1) or self._visibility.is_explored(r2, c2)
+            if v1:
+                alpha = 200
+            elif e1:
+                alpha = 120
             else:
-                arrow_alpha = 70
+                alpha = 60
 
-            self._draw_arrow(
-                surface, cx, cy, dr, dc, arrow_sz,
-                (255, 240, 180, arrow_alpha),  # light gold, stands out
-            )
+            x1, y1 = c1 * cs + half, r1 * cs + half
+            x2, y2 = c2 * cs + half, r2 * cs + half
+            pygame.draw.line(line_surf, (255, 240, 180, alpha), (x1, y1), (x2, y2), line_width)
 
-    @staticmethod
-    def _draw_arrow(
-        surface: pygame.Surface,
-        cx: int, cy: int,
-        dr: int, dc: int,
-        size: int,
-        color: tuple,
-    ) -> None:
-        """Draw a single directional arrow at (cx, cy) pointing in (dr, dc)."""
-        # Build a triangle pointing right, then rotate
-        pts = [
-            (cx + size, cy),            # tip
-            (cx - size, cy - size),     # top-left
-            (cx - size // 2, cy),       # inner notch
-            (cx - size, cy + size),     # bottom-left
-        ]
-
-        if dc == -1:          # left
-            angle = 180
-        elif dr == -1:        # up (smaller y in screen coords)
-            angle = -90
-        elif dr == 1:         # down (larger y in screen coords)
-            angle = 90
-        else:                 # right (dc == 1)
-            angle = 0
-
-        if angle != 0:
-            rad = math.radians(angle)
-            cos_a, sin_a = math.cos(rad), math.sin(rad)
-            pts = [
-                (
-                    int((x - cx) * cos_a - (y - cy) * sin_a + cx),
-                    int((x - cx) * sin_a + (y - cy) * cos_a + cy),
-                )
-                for x, y in pts
-            ]
-
-        pygame.draw.polygon(surface, color, pts)
+        surface.blit(line_surf, (0, 0))
 
     def _render_maze(self, surface: pygame.Surface) -> None:
         if self._maze_surface is None or self._player is None:
@@ -500,21 +460,26 @@ class GameplayScene(Scene):
             y += 26
 
         # Optimal path reference
-        if self._optimal_result is not None:
+        mode_names = {0: "OFF", 1: "自由", 2: "S→E"}
+        mode_name = mode_names[self._show_optimal]
+        result = self._optimal_free if self._show_optimal == 1 else self._optimal_se
+        if self._show_optimal > 0 and result is not None:
             y += 6
-            opt_on = "ON" if self._show_optimal else "OFF"
-            Label(f"— 最优参考 (O键) [{opt_on}] —", self._hud_font_small, COLOR_GOLD).render(surface, x, y)
+            Label(f"— 最优参考 O键 [{mode_name}] —", self._hud_font_small, COLOR_GOLD).render(surface, x, y)
             y += 20
-            Label(f"理论最优:  {self._optimal_result.max_resource}",
+            Label(f"理论最优:  {result.max_resource}",
                   self._hud_font_small, COLOR_GOLD).render(surface, x + 10, y)
             y += 18
-            Label(f"硬币: {self._optimal_result.coins_in_path}  陷阱: {self._optimal_result.traps_in_path}",
+            Label(f"硬币: {result.coins_in_path}  陷阱: {result.traps_in_path}",
                   self._hud_font_small, COLOR_GOLD).render(surface, x + 10, y)
+        else:
+            y += 6
+            Label(f"— 最优参考 O键 [OFF] —", self._hud_font_small, COLOR_TEXT_DIM).render(surface, x, y)
 
         # Controls
         y = MAZE_AREA_TOP + MAZE_AREA_HEIGHT - 130
         Label("— 操作 —", self._hud_font, COLOR_TEXT_DIM).render(surface, x, y)
         y += 26
-        for ctrl in ("↑↓←→/WASD  移动", "TAB  切换AI自动", "O  切换最优路径", "Esc  暂停"):
+        for ctrl in ("↑↓←→/WASD  移动", "TAB  切换AI自动", "O  自由/S→E/关", "Esc  暂停"):
             Label(ctrl, self._hud_font_small, COLOR_TEXT_DIM).render(surface, x + 5, y)
             y += 22

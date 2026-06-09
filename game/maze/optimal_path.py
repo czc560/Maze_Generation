@@ -141,11 +141,69 @@ def _bfs_tree(maze: Maze):
 
 
 def _solve_tree_dp(maze: Maze, require_end: bool) -> OptimalPathResult:
-    """Core tree-DP solver. Assumes the maze is a tree."""
+    """Core tree-DP solver. Assumes the maze is a tree.
+
+    When require_end=True:  walk must start at S and end at E.
+    When require_end=False: walk may start/end anywhere — finds the
+        globally optimal connected subtree and produces a covering walk.
+    """
     parent, children, order, _, _, _ = _bfs_tree(maze)
     s, e = maze.start, maze.end
 
-    # ---- Backbone S → E ------------------------------------------------
+    # ---- Bottom-up DP: best[u] = value(u) + Σ max(0, best[c]) ----
+    best: dict[tuple[int, int], int] = {}
+    for u in reversed(order):
+        val = _cell_value(maze, u)
+        for c in children[u]:
+            val += max(0, best[c])
+        best[u] = val
+
+    # ---- Select included cells -----------------------------------------
+    if not require_end:
+        # Free start/end: find the globally optimal subtree.
+        max_node = max(best, key=best.get)  # type: ignore[arg-type]
+
+        included: set[tuple[int, int]] = set()
+
+        def collect(u: tuple[int, int]) -> None:
+            included.add(u)
+            for c in children[u]:
+                if best[c] > 0:
+                    collect(c)
+
+        collect(max_node)
+
+        # Total resource = sum of all cell values in the subtree
+        total = sum(_cell_value(maze, u) for u in included)
+
+        # Walk: DFS from max_node, each child branch entered and returned from
+        walk: list[tuple[int, int]] = []
+
+        def dfs_walk(u: tuple[int, int]) -> None:
+            walk.append(u)
+            for c in children[u]:
+                if c in included:
+                    dfs_walk(c)
+                    walk.append(u)  # return to u
+
+        dfs_walk(max_node)
+
+        coins = sum(1 for u in included if _is_coin(maze, u))
+        traps = sum(1 for u in included if _is_trap(maze, u))
+
+        return OptimalPathResult(
+            max_resource=total,
+            path=walk,
+            visited_cells=included,
+            coins_in_path=coins,
+            traps_in_path=traps,
+            is_optimal=True,
+            note=f"完美迷宫(树): 树形DP, 全局最优。起点={max_node}",
+        )
+
+    # ---- require_end=True: walk must start at S, end at E --------------
+
+    # Backbone S → E
     backbone: list[tuple[int, int]] = []
     cur = e
     while cur is not None:
@@ -159,51 +217,30 @@ def _solve_tree_dp(maze: Maze, require_end: bool) -> OptimalPathResult:
         nxt_toward_e[backbone[i]] = backbone[i + 1]
     nxt_toward_e[backbone[-1]] = None
 
-    # ---- Bottom-up DP: best[u] = value(u) + Σ max(0, best[c]) ----
-    best: dict[tuple[int, int], int] = {}
-    for u in reversed(order):
-        val = _cell_value(maze, u)
+    included = set(backbone)
+
+    def grow(u: tuple[int, int]) -> None:
+        included.add(u)
         for c in children[u]:
-            val += max(0, best[c])
-        best[u] = val
+            if best[c] > 0:
+                grow(c)
 
-    # ---- Select included cells -----------------------------------------
-    if not require_end:
-        # Don't require reaching E — take all positive branches from S
-        included: set[tuple[int, int]] = set()
+    for u in backbone:
+        for c in children[u]:
+            if c == nxt_toward_e.get(u):
+                continue  # backbone child handled separately
+            if best[c] > 0:
+                grow(c)
 
-        def grow(u: tuple[int, int]) -> None:
-            included.add(u)
-            for c in children[u]:
-                if best[c] > 0:
-                    grow(c)
-
-        grow(s)
-    else:
-        included = set(backbone)
-
-        def grow(u: tuple[int, int]) -> None:
-            included.add(u)
-            for c in children[u]:
-                if best[c] > 0:
-                    grow(c)
-
-        for u in backbone:
-            for c in children[u]:
-                if c == nxt_toward_e.get(u):
-                    continue  # backbone child handled separately
-                if best[c] > 0:
-                    grow(c)
-
-    # ---- Total resource (excluding S, E) ------------------------------
+    # Total resource (excluding S, E)
     total = sum(_cell_value(maze, u) for u in included if u not in (s, e))
 
-    # ---- Build actual S→E walk ----------------------------------------
+    # Build actual S→E walk
     walk: list[tuple[int, int]] = []
 
     def dfs(u: tuple[int, int]) -> None:
         walk.append(u)
-        exit_child = nxt_toward_e.get(u) if require_end else None
+        exit_child = nxt_toward_e.get(u)
         kids = [c for c in children[u] if c in included]
         # Visit non-exit children first (go & return)
         for c in kids:
@@ -238,9 +275,9 @@ def _solve_tree_dp(maze: Maze, require_end: bool) -> OptimalPathResult:
 
 def compute_optimal_path(
     maze: Maze,
-    require_end: bool = True,
+    require_end: bool = False,
 ) -> OptimalPathResult:
-    """Compute the optimal resource-collection path from S to E.
+    """Compute the optimal resource-collection path.
 
     For perfect mazes (trees) the result is guaranteed globally optimal.
     For non-tree mazes a warning is included and the result uses the BFS
@@ -248,7 +285,9 @@ def compute_optimal_path(
 
     Args:
         maze: A game ``Maze`` instance with start/end set.
-        require_end: If True (default), the walk must end at E.
+        require_end: If True, the walk must start at S and end at E.
+            If False (default), start/end can be anywhere — finds the
+            globally optimal connected subtree.
 
     Returns:
         OptimalPathResult with max_resource, path, visited_cells, etc.
@@ -278,7 +317,7 @@ def compute_optimal_path(
 def verify_path(
     maze: Maze,
     path: list[tuple[int, int]],
-    require_end: bool = True,
+    require_end: bool = False,
 ) -> dict:
     """Replay a walk and validate legality + recompute resource value.
 
@@ -303,10 +342,11 @@ def verify_path(
     starts_at_s = (path[0] == s)
     ends_at_e = (path[-1] == e)
 
-    if not starts_at_s:
-        errors.append(f"起点不是 S{s}, 而是 {path[0]}")
-    if require_end and not ends_at_e:
-        errors.append(f"终点不是 E{e}, 而是 {path[-1]}")
+    if require_end:
+        if not starts_at_s:
+            errors.append(f"起点不是 S{s}, 而是 {path[0]}")
+        if not ends_at_e:
+            errors.append(f"终点不是 E{e}, 而是 {path[-1]}")
 
     for i, (r, c) in enumerate(path):
         if not _walkable(maze, r, c):

@@ -33,7 +33,7 @@ from game.maze.optimal_path import (
 )
 
 
-def solve_one(path: str, out_path: str | None = None, require_end: bool = True) -> int:
+def solve_one(path: str, out_path: str | None = None, require_end: bool = False) -> int:
     """Solve a single maze JSON file.  Returns 0 on success, 1 on failure."""
     print(f"── 求解: {path} ──")
 
@@ -125,7 +125,7 @@ def main() -> None:
     ap.add_argument("maze_files", nargs="*", help="迷宫 JSON 文件（求解模式）")
     ap.add_argument("--out", default=None, metavar="PATH", help="输出 JSON 路径")
     ap.add_argument("--out-dir", default=None, metavar="DIR", help="批量输出目录")
-    ap.add_argument("--no-require-end", action="store_true", help="不要求路径在 E 结束")
+    ap.add_argument("--require-end", action="store_true", help="要求路径从 S 出发、在 E 结束")
 
     # Generate mode
     ap.add_argument("--generate", nargs=2, metavar=("ROWS", "COLS"), type=int,
@@ -149,7 +149,7 @@ def main() -> None:
         ap.print_help()
         sys.exit(1)
 
-    require_end = not args.no_require_end
+    require_end = args.require_end
     files = args.maze_files
     failed = 0
 
