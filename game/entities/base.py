@@ -73,6 +73,7 @@ class Entity(pygame.sprite.Sprite):
         size = (self.cell_size, self.cell_size)
         self.image = self._asset_manager.get_image(self.asset_key, size)
         self.rect = self.image.get_rect()
+        self._sync_rect()
 
     def set_cell_size(self, size: int) -> None:
         """Update cell size and reload the image."""

@@ -12,6 +12,7 @@ from game.scenes.base import Scene
 from game.constants import (
     COLOR_BG, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_ACCENT,
     COLOR_GOLD, COLOR_RED, COLOR_GREEN,
+    COLOR_OPTIMAL_HIGHLIGHT, COLOR_OPTIMAL_DIM, COLOR_OPTIMAL_BORDER,
     MAZE_AREA_LEFT, MAZE_AREA_TOP, MAZE_AREA_WIDTH, MAZE_AREA_HEIGHT,
     HUD_PANEL_X, HUD_PANEL_WIDTH,
     GameEvent,
@@ -83,6 +84,11 @@ class GameplayScene(Scene):
 
         self._boss_battle_result: dict | None = None
         self._needs_rebuild = True
+
+        # Optimal path — two modes computed, 0=off, 1=free, 2=S→E
+        self._optimal_free = None
+        self._optimal_se = None
+        self._show_optimal = 0
 
     # ========================================================================
     #  Lifecycle
@@ -170,6 +176,12 @@ class GameplayScene(Scene):
 
         self._boss_battle_result = None
 
+        # Compute optimal resource-collection path — both free and S→E modes
+        from game.maze.optimal_path import compute_optimal_path
+        self._optimal_free = compute_optimal_path(self._maze, require_end=False)
+        self._optimal_se = compute_optimal_path(self._maze, require_end=True)
+        self._show_optimal = 0
+
     def _init_ai(self) -> None:
         """Create the AI agent based on config."""
         algo = self._ai_strategy  # "simple_greedy" | "memory_greedy" | "dqn"
@@ -216,6 +228,8 @@ class GameplayScene(Scene):
             self._ai_active = False  # manual input disables AI
         elif key == pygame.K_TAB:
             self._ai_active = not self._ai_active
+        elif key == pygame.K_o:
+            self._show_optimal = (self._show_optimal + 1) % 3
         elif key == pygame.K_ESCAPE:
             from game.scenes.pause import PauseScene
             self.manager.push(PauseScene(self.manager))
@@ -241,6 +255,9 @@ class GameplayScene(Scene):
         self.manager.replace(ResultsScene(
             self.manager, maze=self._maze, player=self._player,
             game_rules=self._game_rules, player_lost=player_lost,
+            optimal_result=(self._optimal_free if self._show_optimal == 1
+                            else self._optimal_se if self._show_optimal == 2
+                            else self._optimal_free),
         ))
 
     # ========================================================================
@@ -318,6 +335,73 @@ class GameplayScene(Scene):
         self._render_maze(surface)
         self._render_hud(surface)
 
+    def _render_optimal_overlay(self, surface: pygame.Surface) -> None:
+        """Draw gold cell highlights + directional arrows for the optimal walk.
+
+        Rendered on top of fog so the optimal path can be seen as a hint
+        even through unexplored areas.  Alpha varies by visibility state:
+        visible > explored > unexplored.
+        """
+        result = self._optimal_free if self._show_optimal == 1 else self._optimal_se
+        if self._show_optimal == 0 or result is None:
+            return
+        if self._visibility is None:
+            return
+
+        cs = self._cell_size
+
+        # ---- Pass 1: highlight visited cells ----
+        for r, c in result.visited_cells:
+            px = c * cs
+            py = r * cs
+
+            if self._visibility.is_visible(r, c):
+                alpha_fill, alpha_border = 70, 120
+                color = COLOR_OPTIMAL_HIGHLIGHT
+            elif self._visibility.is_explored(r, c):
+                alpha_fill, alpha_border = 40, 75
+                color = COLOR_OPTIMAL_DIM
+            else:
+                alpha_fill, alpha_border = 18, 42
+                color = COLOR_OPTIMAL_DIM
+
+            overlay = pygame.Surface((cs, cs), pygame.SRCALPHA)
+            overlay.fill((*color, alpha_fill))
+            pygame.draw.rect(
+                overlay, (*COLOR_OPTIMAL_BORDER, alpha_border),
+                (0, 0, cs, cs), 1,
+            )
+            surface.blit(overlay, (px, py))
+
+        # ---- Pass 2: draw path lines connecting cell centers ----
+        path = result.path
+        if len(path) < 2:
+            return
+
+        mw = self._maze.cols * cs
+        mh = self._maze.rows * cs
+        line_surf = pygame.Surface((mw, mh), pygame.SRCALPHA)
+        line_width = max(3, cs // 6)
+        half = cs // 2
+
+        for i in range(len(path) - 1):
+            (r1, c1), (r2, c2) = path[i], path[i + 1]
+
+            v1 = self._visibility.is_visible(r1, c1) or self._visibility.is_visible(r2, c2)
+            e1 = self._visibility.is_explored(r1, c1) or self._visibility.is_explored(r2, c2)
+            if v1:
+                alpha = 200
+            elif e1:
+                alpha = 120
+            else:
+                alpha = 60
+
+            x1, y1 = c1 * cs + half, r1 * cs + half
+            x2, y2 = c2 * cs + half, r2 * cs + half
+            pygame.draw.line(line_surf, (255, 240, 180, alpha), (x1, y1), (x2, y2), line_width)
+
+        surface.blit(line_surf, (0, 0))
+
     def _render_maze(self, surface: pygame.Surface) -> None:
         if self._maze_surface is None or self._player is None:
             return
@@ -333,6 +417,10 @@ class GameplayScene(Scene):
             ms.blit(self._player.image, self._player.rect)
 
         self._visibility.render_fog(ms, self._cell_size)
+
+        # Optimal path overlay (above fog, below final blit)
+        self._render_optimal_overlay(ms)
+
         surface.blit(ms, (ox, oy))
         pygame.draw.rect(surface, (70, 70, 90),
                          (ox - 1, oy - 1, ms.get_width() + 2, ms.get_height() + 2), 1)
@@ -369,11 +457,29 @@ class GameplayScene(Scene):
             bh = self._game_rules.get("boss_hp", [])
             Label(f"Boss: {len(bh)}  |  回合限制: {self._game_rules.get('min_rounds','?')}  |  重试: {self._game_rules.get('coin_consumption','?')}G",
                   self._hud_font_small, COLOR_TEXT).render(surface, x, y)
+            y += 26
+
+        # Optimal path reference
+        mode_names = {0: "OFF", 1: "自由", 2: "S→E"}
+        mode_name = mode_names[self._show_optimal]
+        result = self._optimal_free if self._show_optimal == 1 else self._optimal_se
+        if self._show_optimal > 0 and result is not None:
+            y += 6
+            Label(f"— 最优参考 O键 [{mode_name}] —", self._hud_font_small, COLOR_GOLD).render(surface, x, y)
+            y += 20
+            Label(f"理论最优:  {result.max_resource}",
+                  self._hud_font_small, COLOR_GOLD).render(surface, x + 10, y)
+            y += 18
+            Label(f"硬币: {result.coins_in_path}  陷阱: {result.traps_in_path}",
+                  self._hud_font_small, COLOR_GOLD).render(surface, x + 10, y)
+        else:
+            y += 6
+            Label(f"— 最优参考 O键 [OFF] —", self._hud_font_small, COLOR_TEXT_DIM).render(surface, x, y)
 
         # Controls
         y = MAZE_AREA_TOP + MAZE_AREA_HEIGHT - 130
         Label("— 操作 —", self._hud_font, COLOR_TEXT_DIM).render(surface, x, y)
         y += 26
-        for ctrl in ("↑↓←→/WASD  移动", "TAB  切换AI自动", "Esc  暂停"):
+        for ctrl in ("↑↓←→/WASD  移动", "TAB  切换AI自动", "O  自由/S→E/关", "Esc  暂停"):
             Label(ctrl, self._hud_font_small, COLOR_TEXT_DIM).render(surface, x + 5, y)
             y += 22

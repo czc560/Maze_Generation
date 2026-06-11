@@ -14,12 +14,14 @@ from game.ui.panel import Panel
 class ResultsScene(Scene):
     """End-of-game results."""
 
-    def __init__(self, manager, maze=None, player=None, game_rules=None, player_lost=False) -> None:
+    def __init__(self, manager, maze=None, player=None, game_rules=None, player_lost=False,
+                 optimal_result=None) -> None:
         super().__init__(manager)
         self._maze = maze
         self._player = player
         self._game_rules = game_rules or {}
         self._player_lost = player_lost
+        self._optimal_result = optimal_result
         am = self.engine.asset_manager
         self._font_title = am.get_font(None, 42)
         self._font = am.get_font(None, 24)
@@ -96,6 +98,19 @@ class ResultsScene(Scene):
                 bh = self._game_rules.get("boss_hp", [])
                 Label(f"Boss: {len(bh)} | 回合限制: {self._game_rules.get('min_rounds','?')} | 重试: {self._game_rules.get('coin_consumption','?')}G",
                       self._font_small, COLOR_TEXT_DIM).render_centered(surface, sw // 2, y)
+                y += 28
+
+            # Optimal path comparison
+            if self._optimal_result is not None:
+                y += 12
+                opt_panel = pygame.Rect(sw // 2 - 200, y, 400, 60)
+                Panel(opt_panel, color=(40, 35, 20), border_color=(90, 75, 30)).render(surface)
+                y += 12
+                Label("理论最优资源", self._font_small, COLOR_GOLD).render_centered(surface, sw // 2, y)
+                y += 24
+                optimal_text = f"{self._optimal_result.max_resource}"
+                Label(optimal_text, self._font, COLOR_GOLD).render_centered(surface, sw // 2, y)
+                y += 12
 
         Label("空格/ESC/回车 → 再来一局", self._font_small, COLOR_TEXT_DIM).render_centered(
             surface, sw // 2, sh - 90)

@@ -141,7 +141,6 @@ class MazeConfigScene(Scene):
         for w in self._widgets:
             if hasattr(w, 'handle_event'): w.handle_event(event)
         for btn in self._buttons: btn.handle_event(event)
-        if hasattr(self, '_seed_input'): self._seed_input.handle_event(event)
 
     def update(self, dt: float) -> None:
         if hasattr(self, '_seed_input'): self._seed_input.update(dt)
@@ -155,5 +154,4 @@ class MazeConfigScene(Scene):
         for s in self._sliders: s.render(surface)
         for w in self._widgets:
             if hasattr(w, 'render'): w.render(surface)
-        if hasattr(self, '_seed_input'): self._seed_input.render(surface)
         for btn in self._buttons: btn.render(surface)

@@ -72,3 +72,8 @@ COLOR_ACCENT       = (100, 140, 255)
 COLOR_GOLD         = (255, 200, 60)
 COLOR_RED          = (220, 50, 50)
 COLOR_GREEN        = (80, 220, 80)
+
+# Optimal path overlay
+COLOR_OPTIMAL_HIGHLIGHT = (255, 215, 0)   # gold — visible cells
+COLOR_OPTIMAL_DIM       = (180, 150, 30)  # dim gold — fog-covered cells
+COLOR_OPTIMAL_BORDER    = (255, 200, 60)  # gold border
