@@ -10,6 +10,10 @@
 
     # 生成迷宫
     python solve_maze.py --generate 15 15 --seed 42 --out maze.json
+
+    # 检查 Boss 战技能序列最优性
+    python solve_maze.py --check-sequence input.json
+    python solve_maze.py --check-sequence input.json --out result.json
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ from game.maze.optimal_path import (
     export_game_maze_json,
     game_maze_to_grid,
 )
+from game.battle.rules import check_sequence_optimality
 
 
 def solve_one(path: str, out_path: str | None = None, require_end: bool = False) -> int:
@@ -118,6 +123,71 @@ def cmd_generate(args) -> int:
     return 0
 
 
+def cmd_check_sequence(args) -> int:
+    """Check whether a skill sequence is the minimum-turn optimal sequence.
+
+    Input JSON format::
+
+        {"B":[20,35],"PlayerSkills":[[5,0],[10,2]],"SkillSequence":[1,0,0,1,0,0]}
+
+    Returns 0 if optimal, 1 if not optimal or illegal.
+    """
+    path: str = args.check_sequence
+    print(f"── 检查序列最优性: {path} ──")
+
+    # Load
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"  ❌ 加载失败: {e}")
+        return 1
+
+    # Validate required fields
+    for key in ("B", "PlayerSkills", "SkillSequence"):
+        if key not in data:
+            print(f"  ❌ 缺少字段: {key}")
+            return 1
+
+    B: list[int] = data["B"]
+    PlayerSkills: list[list[int]] = data["PlayerSkills"]
+    SkillSequence: list[int] = data["SkillSequence"]
+
+    # Run check
+    result = check_sequence_optimality(B, PlayerSkills, SkillSequence)
+
+    # Print
+    print(f"  Boss数: {result['bosses_total']}  击败: {result['bosses_defeated']}")
+    print(f"  使用回合: {result['turns_used']}  理论最优: {result['optimal_turns']}")
+    print(f"  合法: {'✅' if result['legal'] else '❌'}  "
+          f"最优: {'✅' if result['is_optimal'] else '❌'}")
+    if result["errors"]:
+        for err in result["errors"]:
+            print(f"    ⚠ {err}")
+
+    for d in result.get("boss_details", []):
+        status = "✅ 击败" if d["defeated"] else "❌ 未击败"
+        opt = d.get("optimal_turns", "?")
+        opt_seq = d.get("optimal_sequence", [])
+        print(f"  Boss#{d['boss_index']+1} HP={d['hp']}  "
+              f"实际={d['turns']}回合  最优={opt}回合  {status}")
+        if opt_seq:
+            print(f"    最优序列: {opt_seq}")
+
+    if result.get("optimal_sequence"):
+        print(f"  参考最优序列 (全部): {result['optimal_sequence']}")
+
+    # Export
+    if args.out:
+        out_path = args.out
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        print(f"  → 已写入: {os.path.abspath(out_path)}")
+
+    return 0 if result["is_optimal"] else 1
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="最优资源收集路径求解器 — 迷宫设计任务 ② 验收用"
@@ -136,12 +206,21 @@ def main() -> None:
                     choices=["mst", "backtracking", "divide_conquer", "branch_bound"],
                     help="生成算法 (default: mst)")
 
+    # Sequence check mode
+    ap.add_argument("--check-sequence", default=None, metavar="FILE",
+                    help="检查技能序列是否为最优 (BOSS 战)")
+
     args = ap.parse_args()
 
     # ---- Generate mode ----
     if args.generate is not None:
         args.generate_rows, args.generate_cols = args.generate
         rc = cmd_generate(args)
+        sys.exit(rc)
+
+    # ---- Sequence check mode ----
+    if args.check_sequence is not None:
+        rc = cmd_check_sequence(args)
         sys.exit(rc)
 
     # ---- Solve mode ----

@@ -92,6 +92,61 @@ python solve_maze.py --generate 15 15 --seed 42 --out maze.json
 
 符号：`#` 墙 ` ` 路 `S` 起点 `E` 终点 `B` Boss `G` 金币 `T` 陷阱
 
+### Boss 战技能序列验证
+
+检查给定的技能使用序列是否为击败所有 Boss 的**最少回合最优序列**。
+
+```bash
+python solve_maze.py --check-sequence input.json                  # 检查并打印结果
+python solve_maze.py --check-sequence input.json --out result.json # 同时导出 JSON
+```
+
+**输入格式**（`input.json`）：
+```json
+{
+  "B": [20, 35],
+  "PlayerSkills": [[5, 0], [10, 2]],
+  "SkillSequence": [0, 1, 0, 0, 1]
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `B` | Boss 血量列表，按顺序击败 |
+| `PlayerSkills` | 每项 `[伤害, 冷却时间]`，冷却 C 表示使用后需等待 C 回合 |
+| `SkillSequence` | 每回合使用的技能下标，`-1` 表示空过（等待） |
+
+**冷却规则**：每回合开始时所有冷却 -1；使用技能后该技能冷却 = 原始冷却值；**Boss 间冷却不重置**（连续累积）。
+
+**输出格式**：
+```json
+{
+  "legal": true,
+  "is_optimal": true,
+  "turns_used": 8,
+  "optimal_turns": 8,
+  "total_damage_dealt": 55,
+  "bosses_defeated": 2,
+  "bosses_total": 2,
+  "errors": [],
+  "boss_details": [
+    {"boss_index": 0, "hp": 20, "turns": 3, "optimal_turns": 3, "defeated": true},
+    {"boss_index": 1, "hp": 35, "turns": 5, "optimal_turns": 5, "defeated": true}
+  ],
+  "optimal_sequence": [0, 1, 0, 0, 1, 0, 0, 1]
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `legal` | 序列是否合法（无冷却违规、击败所有 Boss） |
+| `is_optimal` | 是否为最少回合最优序列 |
+| `turns_used` | 实际消耗回合数 |
+| `optimal_turns` | 理论最少回合数（连续 DP 求解） |
+| `optimal_sequence` | 参考最优技能序列（含 `-1` 等待） |
+
+**退出码**：最优 → 0，非最优/不合法 → 1。
+
 ## 算法
 
 ### 最优资源收集路径 — 树形 DP
@@ -105,6 +160,26 @@ best(u) = value(u) + Σ max(0, best(child))
 - 主干 S→E 必选；分支仅当 `best > 0` 纳入（正确处理"陷阱守卫金币"）
 - 时间复杂度 **O(V)**：一次 BFS 建树 + 一遍 DP + 一次 DFS 重建游走
 - 非树迷宫自动降级到 BFS 生成树近似解
+
+### Boss 战最优技能序列 — 连续状态 DP
+
+多 Boss 连续挑战，冷却不重置。问题等价于在联合状态空间上求最短路径。
+
+```
+solve(boss_idx, hp_left, cds) → (min_turns, best_action)
+
+转移（每回合）：
+  1. cds ← tick(cds)                    # 所有冷却 -1
+  2. 尝试每个可用技能 i（cds[i] == 0）
+     hp' ← hp_left - damage[i]
+     cds' ← ticked, cds'[i] ← cd[i] + 1
+     if hp' ≤ 0 → advance to next boss   # 冷却累积
+  3. 否则等待（只能在没有可用技能时）
+```
+
+- 状态空间 `(boss_idx, hp_left, cds_tuple)`，使用 `@lru_cache` 记忆化
+- 冷却跨 Boss 累积，保证结果与验收系统的连续冷却规则一致
+- 时间复杂度最坏 `O(ΣHP × C^K)`，其中 C 为最大冷却值，K 为技能数；实际可达状态远小于上界
 
 ## 依赖
 
