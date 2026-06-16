@@ -14,6 +14,10 @@
     # 检查 Boss 战技能序列最优性
     python solve_maze.py --check-sequence input.json
     python solve_maze.py --check-sequence input.json --out result.json
+
+    # 给定 B + PlayerSkills, 输出最优 SkillSequence
+    python solve_maze.py --optimal-sequence input.json
+    python solve_maze.py --optimal-sequence input.json --out output.json
 """
 
 from __future__ import annotations
@@ -35,7 +39,7 @@ from game.maze.optimal_path import (
     export_game_maze_json,
     game_maze_to_grid,
 )
-from game.battle.rules import check_sequence_optimality
+from game.battle.rules import check_sequence_optimality, _optimal_skill_dp_continuous
 
 
 def solve_one(path: str, out_path: str | None = None, require_end: bool = False) -> int:
@@ -188,6 +192,66 @@ def cmd_check_sequence(args) -> int:
     return 0 if result["is_optimal"] else 1
 
 
+def cmd_optimal_sequence(args) -> int:
+    """Given B and PlayerSkills, compute and output the optimal SkillSequence.
+
+    Input JSON format::
+
+        {"B":[20,35],"PlayerSkills":[[5,0],[10,2]]}
+
+    Output: the same dict with ``SkillSequence`` inserted.
+    """
+    path: str = args.optimal_sequence
+    print(f"── 计算最优序列: {path} ──")
+
+    # Load
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(f"  ❌ 加载失败: {e}")
+        return 1
+
+    # Validate
+    for key in ("B", "PlayerSkills"):
+        if key not in data:
+            print(f"  ❌ 缺少字段: {key}")
+            return 1
+
+    B: list[int] = data["B"]
+    PlayerSkills: list[list[int]] = data["PlayerSkills"]
+
+    # Compute optimal
+    opt_seq = _optimal_skill_dp_continuous(B, PlayerSkills)
+
+    # Build output
+    out_data = {"B": B, "PlayerSkills": PlayerSkills, "SkillSequence": opt_seq}
+
+    print(f"  Boss数: {len(B)}  最优回合: {len(opt_seq)}")
+    print(f"  序列: {opt_seq}")
+
+    # Validate legality
+    from game.battle.rules import simulate_skill_sequence
+    sim = simulate_skill_sequence(B, PlayerSkills, opt_seq)
+    print(f"  自检: legal={sim['legal']}  damage={sim['total_damage_dealt']}  "
+          f"击败={sim['bosses_defeated']}/{sim['bosses_total']}")
+
+    # Export
+    out_path = args.out
+    if out_path is None:
+        out_path = os.path.splitext(path)[0] + "_optimal.json"
+
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(out_data, f, ensure_ascii=False, indent=2)
+    print(f"  → 已写入: {os.path.abspath(out_path)}")
+
+    # Also print raw JSON to stdout for piping
+    print(json.dumps(out_data, ensure_ascii=False))
+
+    return 0
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="最优资源收集路径求解器 — 迷宫设计任务 ② 验收用"
@@ -210,6 +274,10 @@ def main() -> None:
     ap.add_argument("--check-sequence", default=None, metavar="FILE",
                     help="检查技能序列是否为最优 (BOSS 战)")
 
+    # Optimal sequence compute mode
+    ap.add_argument("--optimal-sequence", default=None, metavar="FILE",
+                    help="输入 B + PlayerSkills, 输出最优 SkillSequence")
+
     args = ap.parse_args()
 
     # ---- Generate mode ----
@@ -221,6 +289,11 @@ def main() -> None:
     # ---- Sequence check mode ----
     if args.check_sequence is not None:
         rc = cmd_check_sequence(args)
+        sys.exit(rc)
+
+    # ---- Optimal sequence compute mode ----
+    if args.optimal_sequence is not None:
+        rc = cmd_optimal_sequence(args)
         sys.exit(rc)
 
     # ---- Solve mode ----
