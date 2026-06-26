@@ -102,6 +102,13 @@ class GameplayScene(Scene):
     def resume(self) -> None:
         if self._boss_battle_result is not None:
             result = self._boss_battle_result
+
+            # Sync resource changes from the boss battle before showing results.
+            if self._player is not None:
+                self._player.resources = int(
+                    result.get("coins_remaining", self._player.resources)
+                )
+
             if not result.get("victory"):
                 self._goto_results(player_lost=True)
                 return
