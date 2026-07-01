@@ -221,10 +221,10 @@ def count_coins(maze) -> int:
                if maze.grid[r][c].content == SYMBOLS["coin"])
 
 
-def generate_game_rules(maze) -> dict[str, Any]:
+def generate_game_rules(maze, player_skills: list[list[int]] | None = None) -> dict[str, Any]:
     seed = maze.seed if maze.seed is not None else random.randint(0, 2**31 - 1)
     rng = random.Random(seed)
-    skills = generate_player_skills(rng)
+    skills = [list(s) for s in player_skills] if player_skills is not None else generate_player_skills(rng)
     path = bfs_path(maze, maze.start, maze.end) if maze.start and maze.end else []
     path_steps = max(0, len(path) - 1)
     boss_count = maze.boss_count if hasattr(maze, 'boss_count') else (1 if maze.boss is not None else 0)
@@ -238,8 +238,10 @@ def generate_game_rules(maze) -> dict[str, Any]:
         hp = rng.randint(hp_low, hp_high)
         boss_hp.append(hp)
         boss_turns.append(min_turns_to_defeat(hp, skills))
-    optimal_rounds = path_steps + sum(boss_turns)
-    min_rounds = max(1, int(optimal_rounds * rng.uniform(0.85, 0.98)))
+    # Boss battle has its own round counter. Keep the limit tied to boss combat
+    # only, with a fixed 3-round buffer over the theoretical optimum.
+    optimal_rounds = sum(boss_turns)
+    min_rounds = max(1, optimal_rounds + 3)
     coin_total = count_coins(maze) * COIN_VALUE
     coin_consumption = max(1, coin_total // max(1, boss_count)) if boss_count else 1
     return {"boss_hp": boss_hp, "player_skills": skills, "min_rounds": min_rounds,

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pygame
 from game.scenes.base import Scene
-from game.constants import (COLOR_BG, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_ACCENT,
-                             COLOR_GOLD, COLOR_RED, COLOR_GREEN)
+from game.constants import COLOR_TEXT_DIM, COLOR_GOLD, COLOR_RED, COLOR_GREEN
 from game.ui.label import Label
 from game.ui.button import Button
 from game.ui.panel import Panel
+from game.ui.backgrounds import draw_background
 
 
 class ResultsScene(Scene):
@@ -75,7 +75,7 @@ class ResultsScene(Scene):
     def render(self, surface: pygame.Surface) -> None:
         if self._needs_layout: self._layout(surface)
         sw, sh = surface.get_size()
-        surface.fill(COLOR_BG)
+        draw_background(surface, "results")
 
         title = "Boss战失败!" if self._player_lost else "迷宫探索完成!"
         tcolor = COLOR_RED if self._player_lost else COLOR_GREEN
@@ -84,7 +84,7 @@ class ResultsScene(Scene):
         p = self._player
         if p is not None:
             panel_rect = pygame.Rect(sw // 2 - 200, 110, 400, 280)
-            Panel(panel_rect, color=(28, 28, 42), border_color=(55, 55, 75)).render(surface)
+            Panel(panel_rect, color=(21, 25, 28), border_color=(115, 105, 68)).render(surface)
             stats = [("总步数", str(p.steps_taken)), ("金币", str(p.resources)),
                       ("收集金币", str(p.coin_count)), ("触发陷阱", str(p.trap_count)),
                       ("最终得分", f"{p.score:.1f}")]
@@ -104,7 +104,7 @@ class ResultsScene(Scene):
             if self._optimal_result is not None:
                 y += 12
                 opt_panel = pygame.Rect(sw // 2 - 200, y, 400, 60)
-                Panel(opt_panel, color=(40, 35, 20), border_color=(90, 75, 30)).render(surface)
+                Panel(opt_panel, color=(43, 34, 17), border_color=(151, 118, 45)).render(surface)
                 y += 12
                 Label("理论最优资源", self._font_small, COLOR_GOLD).render_centered(surface, sw // 2, y)
                 y += 24

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from game.maze.symbols import SYMBOLS, COIN_VALUE, TRAP_VALUE
-from game.maze.pathfinding import distance_to_end_map
+from game.maze.pathfinding import bfs_path, distance_to_end_map
 
 
 @dataclass
@@ -78,7 +78,14 @@ class SimpleGreedy:
             return ProbeState(self.position, self.steps, self.resources)
 
         visible = _scan_visible(self.maze, self.position, self.collected_coins, self.triggered_traps)
-        best = max(neighbors, key=lambda n: self._score(n, visible))
+        path = bfs_path(self.maze, self.position, self.maze.end)
+        if len(path) >= 2:
+            best = path[1]
+            adjacent_coins = [n for n in neighbors if n in visible['coins']]
+            if adjacent_coins and self.dist_to_end.get(adjacent_coins[0], 9999) <= self.dist_to_end.get(best, 9999) + 2:
+                best = max(adjacent_coins, key=lambda n: self._score(n, visible))
+        else:
+            best = max(neighbors, key=lambda n: self._score(n, visible))
         self.position = best
         self.steps += 1
         self._collect(best)
@@ -157,7 +164,14 @@ class MemoryGreedy:
             return ProbeState(self.position, self.steps, self.resources)
 
         visible = _scan_visible(self.maze, self.position, self.collected_coins, self.triggered_traps)
-        best = max(neighbors, key=lambda n: self._score(n, visible))
+        path = bfs_path(self.maze, self.position, self.maze.end)
+        if len(path) >= 2:
+            best = path[1]
+            adjacent_coins = [n for n in neighbors if n in visible['coins']]
+            if adjacent_coins and self.dist_to_end.get(adjacent_coins[0], 9999) <= self.dist_to_end.get(best, 9999) + 2:
+                best = max(adjacent_coins, key=lambda n: self._score(n, visible))
+        else:
+            best = max(neighbors, key=lambda n: self._score(n, visible))
         self.position = best
         self.steps += 1
         self.visited[best] = self.visited.get(best, 0) + 1

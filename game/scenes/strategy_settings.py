@@ -5,11 +5,12 @@ from __future__ import annotations
 import pygame
 
 from game.scenes.base import Scene
-from game.constants import COLOR_BG, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_ACCENT
+from game.constants import COLOR_TEXT, COLOR_TEXT_DIM, COLOR_ACCENT
 from game.ui.button import Button
 from game.ui.label import Label
 from game.ui.text_input import TextInput
 from game.ui.panel import Panel
+from game.ui.backgrounds import draw_background
 
 ALGO_OPTIONS = ["simple_greedy", "memory_greedy", "dqn"]
 ALGO_LABELS = {"simple_greedy": "SimpleGreedy", "memory_greedy": "MemoryGreedy", "dqn": "DQN"}
@@ -78,14 +79,14 @@ class StrategySettingsScene(Scene):
         ai_h = 100 + len(fields) * 34 + 40
         ai_y = 70
         self._ai_panel = Panel(pygame.Rect(margin, ai_y, panel_w, ai_h),
-                               color=(28, 28, 42), border_color=(50, 50, 70))
+                               color=(13, 20, 28), border_color=(55, 118, 125))
         self._ai_rect = self._ai_panel.rect
 
         # ---- Boss skills section ----
         skill_y = ai_y + ai_h + 15
         skill_h = 130
         self._skill_panel = Panel(pygame.Rect(margin, skill_y, panel_w, skill_h),
-                                  color=(28, 28, 42), border_color=(50, 50, 70))
+                                  color=(13, 20, 28), border_color=(55, 118, 125))
         self._skill_rect = self._skill_panel.rect
 
         # ---- Inputs for AI params ----
@@ -160,10 +161,10 @@ class StrategySettingsScene(Scene):
 
     def render(self, surface: pygame.Surface) -> None:
         if self._needs_layout: self._layout(surface)
-        surface.fill(COLOR_BG)
+        draw_background(surface, "strategy")
         sw = surface.get_width()
 
-        Label("策 略 设 置", self._font_title, COLOR_ACCENT).render_centered(surface, sw // 2, 25)
+        Label("策 略 设 置", self._font_title, (99, 232, 177)).render_centered(surface, sw // 2, 25)
 
         self._ai_panel.render(surface)
         self._skill_panel.render(surface)

@@ -111,22 +111,26 @@ class Dropdown:
     # ---- Render ------------------------------------------------------------
 
     def render(self, surface: pygame.Surface) -> None:
-        # Header
         header_color = self._color_hover if self._expanded else self._color_bg
-        pygame.draw.rect(surface, header_color, self.rect, border_radius=4)
-        pygame.draw.rect(surface, _lighten(header_color, 30), self.rect, width=1, border_radius=4)
+        shadow = self.rect.move(3, 4)
+        pygame.draw.rect(surface, (0, 0, 0), shadow, border_radius=8)
+        pygame.draw.rect(surface, header_color, self.rect, border_radius=8)
+        pygame.draw.rect(surface, _lighten(header_color, 38), self.rect, width=2, border_radius=8)
+        pygame.draw.line(surface, (255, 232, 156), (self.rect.left + 12, self.rect.top + 4),
+                         (self.rect.right - 12, self.rect.top + 4), 1)
 
-        # Header text
         label = Label(self.selected_value, self.font, self._text_color)
-        label.render_centered(surface, self.rect.centerx, self.rect.centery)
+        label.render(surface, self.rect.x + 14, self.rect.y + (self.rect.height - label.rect.height) // 2)
 
-        # Arrow indicator
         arrow = "▲" if self._expanded else "▼"
-        arrow_lbl = Label(arrow, self.font, self._text_color)
-        arrow_lbl.render(surface, self.rect.right - 30, self.rect.y + 5)
+        arrow_lbl = Label(arrow, self.font, (255, 218, 105))
+        arrow_lbl.render(surface, self.rect.right - 32, self.rect.y + 5)
 
-        # Expanded options
         if self._expanded:
+            list_rect = pygame.Rect(self.rect.x, self.rect.bottom, self.rect.width, OPTION_HEIGHT * len(self.options))
+            pygame.draw.rect(surface, (5, 13, 15), list_rect.move(4, 5), border_radius=8)
+            pygame.draw.rect(surface, self._color_bg, list_rect, border_radius=8)
+            pygame.draw.rect(surface, (255, 218, 105), list_rect, width=2, border_radius=8)
             for i, opt in enumerate(self.options):
                 opt_rect = self._option_rect(i)
                 if i == self._selected_index:
@@ -135,11 +139,12 @@ class Dropdown:
                     c = self._color_hover
                 else:
                     c = self._color_bg
-                pygame.draw.rect(surface, c, opt_rect)
-                pygame.draw.rect(surface, _lighten(c, 20), opt_rect, width=1)
-
+                inner = opt_rect.inflate(-6, -4)
+                pygame.draw.rect(surface, c, inner, border_radius=6)
+                if i == self._selected_index:
+                    pygame.draw.circle(surface, (255, 218, 105), (inner.left + 13, inner.centery), 4)
                 opt_label = Label(opt, self.font, self._text_color)
-                opt_label.render_centered(surface, opt_rect.centerx, opt_rect.centery)
+                opt_label.render(surface, inner.left + 28, inner.y + (inner.height - opt_label.rect.height) // 2)
 
 
 def _lighten(color: tuple[int, int, int], amount: int) -> tuple[int, int, int]:

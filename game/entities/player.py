@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pygame
 
 from game.assets.manager import AssetManager
@@ -45,6 +47,12 @@ class Player(Entity):
         # Pending action after animation completes
         self._pending_arrival_action: str | None = None
 
+        # Visual movement state
+        self._facing: tuple[int, int] = (0, 1)
+        self._walk_phase: float = 0.0
+        self._trail_timer: float = 0.0
+        self._trail: list[dict] = []
+
     # ---- Movement ----------------------------------------------------------
 
     def try_move(self, direction: tuple[int, int], maze) -> bool:
@@ -60,7 +68,8 @@ class Player(Entity):
         if not maze.grid[tr][tc].walkable:
             return False
 
-        self.move_to((tr, tc), duration=0.10)
+        self._facing = direction
+        self.move_to((tr, tc), duration=0.12)
         return True
 
     def handle_keydown(self, key: int, maze) -> bool:
@@ -69,6 +78,72 @@ class Player(Entity):
         if direction is None:
             return False
         return self.try_move(direction, maze)
+
+
+    def update(self, dt: float) -> None:
+        moving_before = self.is_moving
+        super().update(dt)
+
+        if self.is_moving or moving_before:
+            self._walk_phase += dt * 18.0
+            self._trail_timer += dt
+            if self._trail_timer >= 0.025:
+                self._trail_timer = 0.0
+                self._trail.append({"center": self.rect.center, "age": 0.0, "life": 0.18})
+        else:
+            self._walk_phase *= max(0.0, 1.0 - dt * 10.0)
+
+        for item in self._trail:
+            item["age"] += dt
+        self._trail = [item for item in self._trail if item["age"] < item["life"]]
+
+    def render(self, surface: pygame.Surface) -> None:
+        """Draw the player with walk squash, bob, shadow, and short motion trail."""
+        if self.image is None:
+            return
+
+        for item in self._trail:
+            life = max(0.001, item["life"])
+            alpha = int(76 * (1.0 - item["age"] / life))
+            ghost = pygame.transform.smoothscale(
+                self.image,
+                (max(1, int(self.cell_size * 0.86)), max(1, int(self.cell_size * 0.86))),
+            ).convert_alpha()
+            ghost.fill((120, 210, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
+            surface.blit(ghost, ghost.get_rect(center=item["center"]))
+
+        cx, cy = self.rect.center
+        progress = 0.0
+        if self._anim is not None and self._anim.duration > 0:
+            progress = max(0.0, min(1.0, self._anim.elapsed / self._anim.duration))
+        step = abs(math.sin(progress * math.pi)) if self.is_moving else 0.0
+
+        shadow_w = int(self.cell_size * (0.72 + 0.12 * (1.0 - step)))
+        shadow_h = max(4, int(self.cell_size * 0.18))
+        shadow = pygame.Surface((shadow_w, shadow_h), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow, (0, 0, 0, 92), shadow.get_rect())
+        surface.blit(shadow, shadow.get_rect(center=(cx, self.rect.bottom - max(2, self.cell_size // 14))))
+
+        bob = int(-self.cell_size * 0.16 * step)
+        lean_x = int(self._facing[1] * self.cell_size * 0.06 * step)
+        lean_y = int(self._facing[0] * self.cell_size * 0.04 * step)
+        scale_x = 1.0 + 0.08 * step
+        scale_y = 1.0 - 0.05 * step
+        draw_w = max(1, int(self.cell_size * scale_x))
+        draw_h = max(1, int(self.cell_size * scale_y))
+
+        sprite = pygame.transform.smoothscale(self.image, (draw_w, draw_h)).convert_alpha()
+        if self._facing[1] < 0:
+            sprite = pygame.transform.flip(sprite, True, False)
+        if self.is_moving:
+            angle = -self._facing[1] * 6.0 * step + self._facing[0] * 3.0 * step
+            sprite = pygame.transform.rotate(sprite, angle)
+
+        glow_size = max(8, int(self.cell_size * (0.78 + 0.18 * step)))
+        glow = pygame.Surface((glow_size, glow_size), pygame.SRCALPHA)
+        pygame.draw.circle(glow, (95, 205, 255, int(28 + 34 * step)), (glow_size // 2, glow_size // 2), glow_size // 2)
+        surface.blit(glow, glow.get_rect(center=(cx + lean_x, cy + bob + lean_y)))
+        surface.blit(sprite, sprite.get_rect(center=(cx + lean_x, cy + bob + lean_y)))
 
     # ---- Arrival handling --------------------------------------------------
 
