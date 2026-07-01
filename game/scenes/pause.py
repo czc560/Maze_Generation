@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pygame
 from game.scenes.base import Scene
-from game.constants import COLOR_TEXT, COLOR_ACCENT
+from game.constants import COLOR_ACCENT
 from game.ui.label import Label
 from game.ui.button import Button
 
@@ -70,7 +70,11 @@ class PauseScene(Scene):
         if self._needs_layout: self._layout(surface)
         sw, sh = surface.get_size()
         overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
+        overlay.fill((0, 0, 0, 155))
         surface.blit(overlay, (0, 0))
+        panel = pygame.Rect(sw // 2 - 185, sh // 2 - 155, 370, 330)
+        pygame.draw.rect(surface, (12, 16, 23, 220), panel, border_radius=10)
+        pygame.draw.rect(surface, (116, 142, 164, 140), panel, width=1, border_radius=10)
+        pygame.draw.line(surface, (255, 209, 112), (panel.left + 86, panel.top + 50), (panel.right - 86, panel.top + 50), 2)
         Label("游 戏 暂 停", self._font, COLOR_ACCENT).render_centered(surface, sw // 2, sh // 2 - 130)
         for btn in self._buttons: btn.render(surface)

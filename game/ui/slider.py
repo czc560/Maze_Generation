@@ -88,23 +88,26 @@ class Slider:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             hx = self.handle_x
             hy = self.track_rect.centery
-            # Check if click is near the handle
             dx = event.pos[0] - hx
             dy = event.pos[1] - hy
             if dx * dx + dy * dy <= (self._handle_radius + 5) ** 2:
                 self._dragging = True
                 return True
-            # Check if click is on the track
-            if self.track_rect.collidepoint(event.pos):
+            if self.track_rect.inflate(0, 14).collidepoint(event.pos):
                 self._dragging = True
                 self._update_from_mouse(event.pos[0])
                 return True
+            self._dragging = False
 
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            was_dragging = self._dragging
             self._dragging = False
-            return True
+            return was_dragging
 
         if event.type == pygame.MOUSEMOTION and self._dragging:
+            if hasattr(event, 'buttons') and not event.buttons[0]:
+                self._dragging = False
+                return False
             self._update_from_mouse(event.pos[0])
             return True
 
@@ -118,30 +121,41 @@ class Slider:
     # ---- Render ------------------------------------------------------------
 
     def render(self, surface: pygame.Surface) -> None:
-        # Label above the track
-        self._label.render(surface, self.track_rect.left, self.track_rect.top - 22)
+        self._label.render(surface, self.track_rect.left, self.track_rect.top - 26)
 
-        # Track background
-        pygame.draw.rect(surface, self._track_color, self.track_rect, border_radius=4)
+        value_text = str(int(self._value)) if self.step >= 1 else f"{self._value:.1f}"
+        value_surf = self.font.render(value_text, True, self._text_color)
+        pill = pygame.Rect(0, 0, value_surf.get_width() + 18, 24)
+        pill.midright = (self.track_rect.right, self.track_rect.top - 17)
+        pygame.draw.rect(surface, (13, 27, 31), pill, border_radius=8)
+        pygame.draw.rect(surface, self._fill_color, pill, width=1, border_radius=8)
+        surface.blit(value_surf, value_surf.get_rect(center=pill.center))
 
-        # Filled portion
-        fill_rect = pygame.Rect(
-            self.track_rect.left,
-            self.track_rect.top,
-            self.handle_x - self.track_rect.left,
-            self.track_rect.height,
-        )
+        rail = self.track_rect.inflate(0, 8)
+        pygame.draw.rect(surface, (10, 20, 24), rail, border_radius=rail.height // 2)
+        pygame.draw.rect(surface, self._track_color, self.track_rect, border_radius=self.track_rect.height // 2)
+
+        fill_rect = pygame.Rect(self.track_rect.left, self.track_rect.top,
+                                self.handle_x - self.track_rect.left, self.track_rect.height)
         if fill_rect.width > 0:
-            pygame.draw.rect(surface, self._fill_color, fill_rect, border_radius=4)
+            pygame.draw.rect(surface, self._fill_color, fill_rect, border_radius=self.track_rect.height // 2)
 
-        # Track border
-        pygame.draw.rect(surface, _lighten(self._track_color, 30), self.track_rect, width=1, border_radius=4)
+        for i in range(6):
+            x = self.track_rect.left + round(self.track_rect.width * i / 5)
+            pygame.draw.line(surface, (213, 230, 205), (x, self.track_rect.bottom + 5),
+                             (x, self.track_rect.bottom + 10), 1)
 
-        # Handle
+        pygame.draw.rect(surface, _lighten(self._track_color, 34), rail, width=1, border_radius=rail.height // 2)
+
         hx = self.handle_x
         hy = self.track_rect.centery
-        pygame.draw.circle(surface, self._handle_color, (hx, hy), self._handle_radius)
-        pygame.draw.circle(surface, (255, 255, 255), (hx, hy), self._handle_radius, width=1)
+        glow = pygame.Surface((42, 42), pygame.SRCALPHA)
+        pygame.draw.circle(glow, (*self._fill_color, 70), (21, 21), 20)
+        surface.blit(glow, glow.get_rect(center=(hx, hy)))
+        pygame.draw.circle(surface, (12, 26, 29), (hx, hy), self._handle_radius + 5)
+        pygame.draw.circle(surface, self._handle_color, (hx, hy), self._handle_radius + 2)
+        pygame.draw.circle(surface, (255, 255, 255), (hx - 3, hy - 3), max(3, self._handle_radius // 2))
+        pygame.draw.circle(surface, (65, 82, 61), (hx, hy), self._handle_radius + 2, width=1)
 
 
 def _lighten(color: tuple[int, int, int], amount: int) -> tuple[int, int, int]:

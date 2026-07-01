@@ -221,10 +221,10 @@ def count_coins(maze) -> int:
                if maze.grid[r][c].content == SYMBOLS["coin"])
 
 
-def generate_game_rules(maze) -> dict[str, Any]:
+def generate_game_rules(maze, player_skills: list[list[int]] | None = None) -> dict[str, Any]:
     seed = maze.seed if maze.seed is not None else random.randint(0, 2**31 - 1)
     rng = random.Random(seed)
-    skills = generate_player_skills(rng)
+    skills = [list(s) for s in player_skills] if player_skills is not None else generate_player_skills(rng)
     path = bfs_path(maze, maze.start, maze.end) if maze.start and maze.end else []
     path_steps = max(0, len(path) - 1)
     boss_count = maze.boss_count if hasattr(maze, 'boss_count') else (1 if maze.boss is not None else 0)
@@ -238,9 +238,310 @@ def generate_game_rules(maze) -> dict[str, Any]:
         hp = rng.randint(hp_low, hp_high)
         boss_hp.append(hp)
         boss_turns.append(min_turns_to_defeat(hp, skills))
-    optimal_rounds = path_steps + sum(boss_turns)
-    min_rounds = max(1, int(optimal_rounds * rng.uniform(0.85, 0.98)))
+    # Boss battle has its own round counter. Keep the limit tied to boss combat
+    # only, with a fixed 3-round buffer over the theoretical optimum.
+    optimal_rounds = sum(boss_turns)
+    min_rounds = max(1, optimal_rounds + 3)
     coin_total = count_coins(maze) * COIN_VALUE
     coin_consumption = max(1, coin_total // max(1, boss_count)) if boss_count else 1
     return {"boss_hp": boss_hp, "player_skills": skills, "min_rounds": min_rounds,
             "coin_consumption": coin_consumption}
+
+
+# ============================================================================
+#  Skill sequence verification — CLI grading support
+# ============================================================================
+
+
+def simulate_skill_sequence(
+    boss_hp_list: list[int],
+    player_skills: list[list[int]],
+    skill_sequence: list[int],
+) -> dict[str, Any]:
+    """Simulate a given skill sequence against a gauntlet of bosses.
+
+    Cooldown model (consistent with ``simulate_battle`` / ``optimal_skill_dp``):
+      1. Tick all cooldowns down by 1 (min 0)
+      2. Check if the chosen skill is ready (cd == 0); error if not
+      3. Apply damage
+      4. Set the used skill's cooldown = skill_cd + 1
+      5. When a boss is defeated, cooldowns reset and next boss starts
+
+    ``skill_sequence[i] == -1`` means "wait" (skip this turn, no damage).
+
+    Returns a dict with keys:
+        legal, turns_used, total_damage_dealt, bosses_defeated,
+        bosses_total, errors, boss_details.
+    """
+    # Short-circuit: empty boss list is trivially legal
+    if not boss_hp_list:
+        return {
+            "legal": True,
+            "turns_used": 0,
+            "total_damage_dealt": 0,
+            "bosses_defeated": 0,
+            "bosses_total": 0,
+            "errors": [],
+            "boss_details": [],
+        }
+
+    n_skills = len(player_skills)
+    cooldowns: list[int] = [0] * n_skills
+    boss_idx = 0
+    boss_hp_left = boss_hp_list[0]
+    total_damage = 0
+    turns_used = 0
+    boss_details: list[dict[str, Any]] = []
+    errors: list[str] = []
+
+    boss_turns = 0
+
+    for step, skill_idx in enumerate(skill_sequence):
+        # ---- 1. Tick cooldowns ------------------------------------------------
+        for i in range(n_skills):
+            if cooldowns[i] > 0:
+                cooldowns[i] -= 1
+
+        # ---- 2. Wait action --------------------------------------------------
+        if skill_idx == -1:
+            turns_used += 1
+            boss_turns += 1
+            continue
+
+        # ---- 3. Validate skill index -----------------------------------------
+        if skill_idx < 0 or skill_idx >= n_skills:
+            errors.append(
+                f"第{step + 1}回合: 技能下标 {skill_idx} 无效 "
+                f"(有效范围 0~{n_skills - 1})"
+            )
+            break
+
+        # ---- 4. Check cooldown -----------------------------------------------
+        if cooldowns[skill_idx] > 0:
+            errors.append(
+                f"第{step + 1}回合: 技能#{skill_idx + 1} "
+                f"冷却中 (还需 {cooldowns[skill_idx]} 回合)"
+            )
+            break
+
+        # ---- 5. Apply damage -------------------------------------------------
+        damage = max(0, player_skills[skill_idx][0])
+        boss_hp_left -= damage
+        total_damage += damage
+        cooldowns[skill_idx] = player_skills[skill_idx][1] + 1
+        turns_used += 1
+        boss_turns += 1
+
+        # ---- 6. Boss defeated? -----------------------------------------------
+        if boss_hp_left <= 0:
+            boss_details.append({
+                "boss_index": boss_idx,
+                "hp": boss_hp_list[boss_idx],
+                "turns": boss_turns,
+                "defeated": True,
+            })
+            boss_idx += 1
+            if boss_idx >= len(boss_hp_list):
+                break  # all bosses defeated!
+            boss_hp_left = boss_hp_list[boss_idx]
+            # NOTE: cooldowns persist across bosses — do NOT reset.
+            boss_turns = 0
+
+    # ---- Post-simulation checks ----------------------------------------------
+    if boss_idx < len(boss_hp_list) and not errors:
+        # Sequence ended before all bosses were defeated
+        errors.append(
+            f"序列耗尽但 Boss#{boss_idx + 1} 仍有 {max(0, boss_hp_left)} HP, "
+            f"共击败 {boss_idx}/{len(boss_hp_list)} 个Boss"
+        )
+        # Record the unfinished boss
+        boss_details.append({
+            "boss_index": boss_idx,
+            "hp": boss_hp_list[boss_idx],
+            "turns": boss_turns,
+            "defeated": False,
+            "hp_remaining": max(0, boss_hp_left),
+        })
+
+    legal = len(errors) == 0
+
+    return {
+        "legal": legal,
+        "turns_used": turns_used,
+        "total_damage_dealt": total_damage,
+        "bosses_defeated": boss_idx,
+        "bosses_total": len(boss_hp_list),
+        "errors": errors,
+        "boss_details": boss_details,
+    }
+
+
+def _optimal_skill_dp_continuous(
+    boss_hp_list: list[int],
+    player_skills: list[list[int]],
+) -> list[int]:
+    """DP for multi-boss gauntlet with cooldowns persisting across bosses.
+
+    Returns the optimal skill-index sequence (including -1 for waits).
+    Uses memoized recursion over (boss_idx, hp_left, cds_tuple).
+    """
+    n_skills = len(player_skills)
+    if not boss_hp_list:
+        return []
+
+    from functools import lru_cache
+
+    @lru_cache(maxsize=None)
+    def solve(
+        boss_idx: int,
+        hp_left: int,
+        cds: tuple[int, ...],
+    ) -> tuple[int, int | None]:
+        """Return (min_turns_from_here, best_action_now).
+
+        best_action_now: skill index (0..n-1), -1 (wait), or None (done).
+        """
+        if boss_idx >= len(boss_hp_list):
+            return (0, None)  # done
+
+        ticked = tuple(max(0, c - 1) for c in cds)
+        best_turns = 10**9
+        best_action: int | None = -1  # default to wait
+
+        # Try each available skill
+        for i in range(n_skills):
+            if ticked[i] == 0:
+                new_hp = hp_left - player_skills[i][0]
+                new_cds = list(ticked)
+                new_cds[i] = player_skills[i][1] + 1
+                new_cds_t = tuple(new_cds)
+
+                if new_hp <= 0:
+                    # Boss defeated → advance to next boss, cd persists
+                    next_idx = boss_idx + 1
+                    next_hp = (
+                        boss_hp_list[next_idx]
+                        if next_idx < len(boss_hp_list)
+                        else 0
+                    )
+                    t, _ = solve(next_idx, next_hp, new_cds_t)
+                else:
+                    t, _ = solve(boss_idx, new_hp, new_cds_t)
+
+                if t + 1 < best_turns:
+                    best_turns = t + 1
+                    best_action = i
+
+        # Wait option — only if no skill is available (to avoid infinite loops)
+        if best_action == -1:
+            t, _ = solve(boss_idx, hp_left, ticked)
+            if t + 1 < best_turns:
+                best_turns = t + 1
+                # best_action stays -1
+
+        return (best_turns, best_action)
+
+    # ---- Reconstruct optimal sequence ----------------------------------------
+    seq: list[int] = []
+    boss_idx = 0
+    hp_left = boss_hp_list[0]
+    cds: tuple[int, ...] = tuple([0] * n_skills)
+
+    while boss_idx < len(boss_hp_list):
+        _, action = solve(boss_idx, hp_left, cds)
+        if action is None:
+            break
+        # Tick (matching DP internal tick)
+        cds = tuple(max(0, c - 1) for c in cds)
+        seq.append(action)
+        if action >= 0:
+            hp_left -= player_skills[action][0]
+            cds_l = list(cds)
+            cds_l[action] = player_skills[action][1] + 1
+            cds = tuple(cds_l)
+        # action == -1: wait, cds already ticked above
+        if hp_left <= 0:
+            boss_idx += 1
+            if boss_idx < len(boss_hp_list):
+                hp_left = boss_hp_list[boss_idx]
+                # cooldowns PERSIST — do NOT reset!
+
+    return seq
+
+
+def check_sequence_optimality(
+    boss_hp_list: list[int],
+    player_skills: list[list[int]],
+    skill_sequence: list[int],
+) -> dict[str, Any]:
+    """Check whether *skill_sequence* is a minimum-turn optimal sequence.
+
+    Simulates the given sequence, then compares its turn count against
+    the theoretical optimum computed via continuous DP (cooldowns persist
+    across bosses — consistent with the evaluation system).
+
+    Returns a dict with keys:
+        legal, is_optimal, turns_used, optimal_turns, total_damage_dealt,
+        bosses_defeated, bosses_total, errors, boss_details,
+        optimal_sequence (reference optimal skill indices, with -1 for waits).
+    """
+    # ---- 1. Simulate the given sequence (cooldowns persist across bosses) ----
+    sim = simulate_skill_sequence(boss_hp_list, player_skills, skill_sequence)
+
+    if not sim["legal"]:
+        return {
+            **sim,
+            "is_optimal": False,
+            "optimal_turns": -1,
+            "optimal_sequence": [],
+        }
+
+    # ---- 2. Compute optimal with continuous DP (cooldowns persist) -----------
+    optimal_seq = _optimal_skill_dp_continuous(boss_hp_list, player_skills)
+    total_optimal_turns = len(optimal_seq)
+
+    # ---- 3. Annotate boss_details with per-boss optimal (from continuous) ----
+    # Split the continuous optimal sequence into per-boss segments
+    boss_idx = 0
+    hp_left = boss_hp_list[0] if boss_hp_list else 0
+    cds: tuple[int, ...] = tuple([0] * len(player_skills))
+    segment_start = 0
+
+    for i, action in enumerate(optimal_seq):
+        cds = tuple(max(0, c - 1) for c in cds)
+        if action >= 0:
+            hp_left -= player_skills[action][0]
+            cds_l = list(cds)
+            cds_l[action] = player_skills[action][1] + 1
+            cds = tuple(cds_l)
+        if hp_left <= 0 and boss_idx < len(boss_hp_list):
+            # Record this boss's segment
+            segment = optimal_seq[segment_start : i + 1]
+            for d in sim["boss_details"]:
+                if d["boss_index"] == boss_idx:
+                    d["optimal_turns"] = len(segment)
+                    d["optimal_sequence"] = segment
+                    break
+            segment_start = i + 1
+            boss_idx += 1
+            if boss_idx < len(boss_hp_list):
+                hp_left = boss_hp_list[boss_idx]
+
+    # ---- 4. Check optimality -------------------------------------------------
+    extra_entries = len(skill_sequence) - sim["turns_used"]
+    is_optimal = (
+        sim["turns_used"] == total_optimal_turns
+        and extra_entries == 0
+    )
+
+    if extra_entries > 0:
+        sim.setdefault("errors", []).append(
+            f"序列有 {extra_entries} 个多余条目（Boss已全部击败，不计入回合数）"
+        )
+
+    return {
+        **sim,
+        "is_optimal": is_optimal,
+        "optimal_turns": total_optimal_turns,
+        "optimal_sequence": optimal_seq,
+    }

@@ -10,7 +10,7 @@ import pygame
 
 from game.scenes.base import Scene
 from game.constants import (
-    COLOR_BG, COLOR_TEXT, COLOR_TEXT_DIM, COLOR_ACCENT,
+    COLOR_TEXT, COLOR_TEXT_DIM,
     COLOR_GOLD, COLOR_RED, COLOR_GREEN,
     COLOR_OPTIMAL_HIGHLIGHT, COLOR_OPTIMAL_DIM, COLOR_OPTIMAL_BORDER,
     MAZE_AREA_LEFT, MAZE_AREA_TOP, MAZE_AREA_WIDTH, MAZE_AREA_HEIGHT,
@@ -24,6 +24,7 @@ from game.entities.markers import StartPortal, EndPortal, BossMarker
 from game.visibility import VisibilityManager
 from game.ui.label import Label
 from game.ui.panel import Panel
+from game.ui.backgrounds import draw_background
 
 
 class GameplayScene(Scene):
@@ -52,6 +53,7 @@ class GameplayScene(Scene):
         self._maze = None
         self._game_rules = None
         self._cell_size = 32
+        self._max_resources = 1
 
         self._tile_group = pygame.sprite.Group()
         self._pickup_group = pygame.sprite.Group()
@@ -79,7 +81,7 @@ class GameplayScene(Scene):
         self._hud_font_large = self._am.get_font(None, 26)
         self._hud_panel = Panel(
             pygame.Rect(HUD_PANEL_X, MAZE_AREA_TOP, HUD_PANEL_WIDTH, MAZE_AREA_HEIGHT),
-            color=(30, 30, 42), border_color=(55, 55, 75),
+            color=(17, 21, 31), border_color=(82, 94, 118),
         )
 
         self._boss_battle_result: dict | None = None
@@ -102,6 +104,13 @@ class GameplayScene(Scene):
     def resume(self) -> None:
         if self._boss_battle_result is not None:
             result = self._boss_battle_result
+
+            # Sync resource changes from the boss battle before showing results.
+            if self._player is not None:
+                self._player.resources = int(
+                    result.get("coins_remaining", self._player.resources)
+                )
+
             if not result.get("victory"):
                 self._goto_results(player_lost=True)
                 return
@@ -113,7 +122,7 @@ class GameplayScene(Scene):
 
     def _build_maze(self) -> None:
         from game.maze.generator import Maze
-        from game.maze import SYMBOLS
+        from game.maze import SYMBOLS, COIN_VALUE
         from game.maze.strategies import make_normalized_strategies
         from game.battle import generate_game_rules
 
@@ -123,7 +132,14 @@ class GameplayScene(Scene):
             generation_method=self._method,
             coin_strategy=coin_strategy, trap_strategy=trap_strategy,
         )
-        self._game_rules = generate_game_rules(self._maze)
+        self._game_rules = generate_game_rules(self._maze, player_skills=self._skills)
+        coin_total = sum(
+            1
+            for r in range(self._maze.rows)
+            for c in range(self._maze.cols)
+            if self._maze.grid[r][c].content == SYMBOLS["coin"]
+        ) * COIN_VALUE
+        self._max_resources = max(1, coin_total)
 
         # Cell size
         self._cell_size = min(
@@ -241,7 +257,7 @@ class GameplayScene(Scene):
     def _trigger_boss_battle(self) -> None:
         from game.scenes.boss_battle import BossBattleScene
         coin_total = self._player.resources if self._player else 0
-        auto_battle = self._config.get("auto_battle", False)
+        auto_battle = bool(self._ai_active or self._config.get("auto_battle", False))
         self.manager.push(BossBattleScene(
             self.manager, game_rules=self._game_rules,
             player_skills=[list(s) for s in self._skills],
@@ -331,7 +347,7 @@ class GameplayScene(Scene):
     # ========================================================================
 
     def render(self, surface: pygame.Surface) -> None:
-        surface.fill(COLOR_BG)
+        draw_background(surface, "gameplay")
         self._render_maze(surface)
         self._render_hud(surface)
 
@@ -413,73 +429,127 @@ class GameplayScene(Scene):
         self._marker_group.draw(ms)
         self._pickup_group.draw(ms)
 
-        if self._player.image:
-            ms.blit(self._player.image, self._player.rect)
+        self._player.render(ms)
 
         self._visibility.render_fog(ms, self._cell_size)
-
-        # Optimal path overlay (above fog, below final blit)
         self._render_optimal_overlay(ms)
 
+        frame = pygame.Rect(ox - 10, oy - 10, ms.get_width() + 20, ms.get_height() + 20)
+        shadow = pygame.Surface((frame.width + 14, frame.height + 14), pygame.SRCALPHA)
+        pygame.draw.rect(shadow, (0, 0, 0, 96), shadow.get_rect(), border_radius=10)
+        surface.blit(shadow, (frame.x + 7, frame.y + 9))
+        pygame.draw.rect(surface, (21, 27, 37), frame, border_radius=8)
+        pygame.draw.rect(surface, (88, 125, 148), frame, width=2, border_radius=8)
+        pygame.draw.rect(surface, (188, 224, 255), frame.inflate(-8, -8), width=1, border_radius=6)
         surface.blit(ms, (ox, oy))
-        pygame.draw.rect(surface, (70, 70, 90),
-                         (ox - 1, oy - 1, ms.get_width() + 2, ms.get_height() + 2), 1)
+
+    def _draw_hud_bar(
+        self,
+        surface: pygame.Surface,
+        rect: pygame.Rect,
+        ratio: float,
+        fill: tuple[int, int, int],
+        bg: tuple[int, int, int] = (30, 35, 46),
+    ) -> None:
+        ratio = max(0.0, min(1.0, ratio))
+        pygame.draw.rect(surface, bg, rect, border_radius=5)
+        if ratio > 0:
+            fill_rect = rect.copy()
+            fill_rect.width = max(4, int(rect.width * ratio))
+            pygame.draw.rect(surface, fill, fill_rect, border_radius=5)
+        pygame.draw.rect(surface, (82, 91, 111), rect, width=1, border_radius=5)
+
+    def _render_hud_icon(self, surface: pygame.Surface, key: str, center: tuple[int, int], size: int) -> None:
+        icon = self._am.get_image(key, (size, size))
+        rect = icon.get_rect(center=center)
+        surface.blit(icon, rect)
+
+    def _draw_stat_row(
+        self,
+        surface: pygame.Surface,
+        y: int,
+        label: str,
+        value: str,
+        color: tuple[int, int, int],
+    ) -> int:
+        x = HUD_PANEL_X + 18
+        pygame.draw.circle(surface, color, (x + 6, y + 11), 5)
+        Label(label, self._hud_font_small, COLOR_TEXT_DIM).render(surface, x + 18, y)
+        value_surf = self._hud_font_small.render(value, True, COLOR_TEXT)
+        surface.blit(value_surf, (HUD_PANEL_X + HUD_PANEL_WIDTH - 18 - value_surf.get_width(), y))
+        return y + 23
 
     def _render_hud(self, surface: pygame.Surface) -> None:
         if self._player is None:
             return
         self._hud_panel.render(surface)
         p = self._player
-        x = HUD_PANEL_X + 15
-        y = MAZE_AREA_TOP + 15
+        x = HUD_PANEL_X + 16
+        y = MAZE_AREA_TOP + 16
+        panel_right = HUD_PANEL_X + HUD_PANEL_WIDTH - 16
 
-        Label("— 状态面板 —", self._hud_font_large, COLOR_ACCENT).render(surface, x, y)
-        y += 40
-
-        for label, value in [
-            ("步数", str(p.steps_taken)), ("金币", str(p.resources)),
-            ("收集", str(p.coin_count)), ("陷阱", str(p.trap_count)),
-            ("得分", f"{p.score:.1f}"),
-        ]:
-            Label(f"{label}:  {value}", self._hud_font_small, COLOR_TEXT).render(surface, x + 10, y)
-            y += 24
-
-        # AI status
-        y += 6
-        ai_text = "AI: ON  (TAB切换)" if self._ai_active else "AI: OFF (TAB切换)"
+        header = pygame.Rect(HUD_PANEL_X + 8, MAZE_AREA_TOP + 8, HUD_PANEL_WIDTH - 16, 112)
+        pygame.draw.rect(surface, (24, 34, 48), header, border_radius=8)
+        pygame.draw.rect(surface, (88, 137, 168), header, width=1, border_radius=8)
+        self._render_hud_icon(surface, "player", (x + 38, y + 42), 68)
+        Label("探索状态", self._hud_font_large, (190, 226, 255)).render(surface, x + 82, y + 10)
+        ai_label = "AI 自动" if self._ai_active else "手动探索"
         ai_color = COLOR_GREEN if self._ai_active else COLOR_TEXT_DIM
-        Label(ai_text, self._hud_font_small, ai_color).render(surface, x, y)
-        y += 26
+        Label(ai_label, self._hud_font_small, ai_color).render(surface, x + 84, y + 44)
+        mode_names = {0: "最优: 关", 1: "最优: 自由", 2: "最优: S-E"}
+        Label(mode_names[self._show_optimal], self._hud_font_small, COLOR_GOLD if self._show_optimal else COLOR_TEXT_DIM).render(
+            surface, x + 84, y + 68
+        )
 
-        # Boss info
+        y = MAZE_AREA_TOP + 138
+        Label("资源", self._hud_font, COLOR_TEXT).render(surface, x, y)
+        coin_ratio = min(1.0, max(0.0, p.resources / max(1, self._max_resources)))
+        self._render_hud_icon(surface, "coin", (panel_right - 22, y + 12), 28)
+        y += 29
+        self._draw_hud_bar(surface, pygame.Rect(x, y, HUD_PANEL_WIDTH - 32, 12), coin_ratio, (238, 180, 57))
+        y += 22
+        y = self._draw_stat_row(surface, y, "金币", f"{p.resources}/{self._max_resources}", COLOR_GOLD)
+        y = self._draw_stat_row(surface, y, "收集", str(p.coin_count), (88, 202, 255))
+        y = self._draw_stat_row(surface, y, "陷阱", str(p.trap_count), COLOR_RED)
+        y = self._draw_stat_row(surface, y, "步数", str(p.steps_taken), (154, 169, 196))
+        y = self._draw_stat_row(surface, y, "效率", f"{p.score:.1f}", COLOR_GREEN)
+
+        y += 8
+        pygame.draw.line(surface, (71, 78, 96), (x, y), (panel_right, y), 1)
+        y += 16
+        Label("Boss", self._hud_font, COLOR_TEXT).render(surface, x, y)
+        self._render_hud_icon(surface, "boss", (panel_right - 22, y + 12), 28)
+        y += 30
         if self._game_rules:
-            y += 8
             bh = self._game_rules.get("boss_hp", [])
-            Label(f"Boss: {len(bh)}  |  回合限制: {self._game_rules.get('min_rounds','?')}  |  重试: {self._game_rules.get('coin_consumption','?')}G",
-                  self._hud_font_small, COLOR_TEXT).render(surface, x, y)
-            y += 26
+            y = self._draw_stat_row(surface, y, "数量", str(len(bh)), (217, 94, 102))
+            y = self._draw_stat_row(surface, y, "回合限制", str(self._game_rules.get("min_rounds", "?")), (235, 190, 91))
+            y = self._draw_stat_row(surface, y, "重试消耗", f"{self._game_rules.get('coin_consumption', '?')}G", COLOR_GOLD)
 
-        # Optimal path reference
-        mode_names = {0: "OFF", 1: "自由", 2: "S→E"}
-        mode_name = mode_names[self._show_optimal]
+        y += 8
+        pygame.draw.line(surface, (71, 78, 96), (x, y), (panel_right, y), 1)
+        y += 16
+        mode_name = {0: "OFF", 1: "自由", 2: "S-E"}[self._show_optimal]
         result = self._optimal_free if self._show_optimal == 1 else self._optimal_se
+        Label("最优参考", self._hud_font, COLOR_TEXT).render(surface, x, y)
+        Label(mode_name, self._hud_font_small, COLOR_GOLD if self._show_optimal else COLOR_TEXT_DIM).render(
+            surface, panel_right - 42, y + 4
+        )
+        y += 30
         if self._show_optimal > 0 and result is not None:
-            y += 6
-            Label(f"— 最优参考 O键 [{mode_name}] —", self._hud_font_small, COLOR_GOLD).render(surface, x, y)
-            y += 20
-            Label(f"理论最优:  {result.max_resource}",
-                  self._hud_font_small, COLOR_GOLD).render(surface, x + 10, y)
-            y += 18
-            Label(f"硬币: {result.coins_in_path}  陷阱: {result.traps_in_path}",
-                  self._hud_font_small, COLOR_GOLD).render(surface, x + 10, y)
+            y = self._draw_stat_row(surface, y, "理论最优", str(result.max_resource), COLOR_GOLD)
+            y = self._draw_stat_row(
+                surface, y, "硬币/陷阱", f"{result.coins_in_path}/{result.traps_in_path}", (88, 202, 255)
+            )
         else:
-            y += 6
-            Label(f"— 最优参考 O键 [OFF] —", self._hud_font_small, COLOR_TEXT_DIM).render(surface, x, y)
+            Label("按 O 循环显示", self._hud_font_small, COLOR_TEXT_DIM).render(surface, x, y)
+            y += 23
 
-        # Controls
-        y = MAZE_AREA_TOP + MAZE_AREA_HEIGHT - 130
-        Label("— 操作 —", self._hud_font, COLOR_TEXT_DIM).render(surface, x, y)
-        y += 26
-        for ctrl in ("↑↓←→/WASD  移动", "TAB  切换AI自动", "O  自由/S→E/关", "Esc  暂停"):
-            Label(ctrl, self._hud_font_small, COLOR_TEXT_DIM).render(surface, x + 5, y)
-            y += 22
+        controls = pygame.Rect(HUD_PANEL_X + 10, MAZE_AREA_TOP + MAZE_AREA_HEIGHT - 110, HUD_PANEL_WIDTH - 20, 98)
+        pygame.draw.rect(surface, (22, 25, 34), controls, border_radius=8)
+        pygame.draw.rect(surface, (72, 82, 102), controls, width=1, border_radius=8)
+        Label("操作", self._hud_font, COLOR_TEXT_DIM).render(surface, controls.x + 12, controls.y + 10)
+        cy = controls.y + 38
+        for ctrl in ("WASD / 方向键  移动", "TAB  AI 自动", "O  最优路径", "Esc  暂停"):
+            Label(ctrl, self._hud_font_small, COLOR_TEXT_DIM).render(surface, controls.x + 12, cy)
+            cy += 18

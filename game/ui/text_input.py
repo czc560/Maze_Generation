@@ -94,21 +94,23 @@ class TextInput:
 
     def render(self, surface: pygame.Surface) -> None:
         bg = self._color_active_bg if self._focused else self._color_bg
-        pygame.draw.rect(surface, bg, self.rect, border_radius=4)
-        pygame.draw.rect(surface, _lighten(bg, 30), self.rect, width=1, border_radius=4)
+        pygame.draw.rect(surface, (0, 0, 0), self.rect.move(3, 4), border_radius=8)
+        pygame.draw.rect(surface, bg, self.rect, border_radius=8)
+        border = self._color_cursor if self._focused else _lighten(bg, 34)
+        pygame.draw.rect(surface, border, self.rect, width=2, border_radius=8)
+        pygame.draw.line(surface, (255, 232, 156), (self.rect.left + 10, self.rect.top + 4),
+                         (self.rect.right - 10, self.rect.top + 4), 1)
 
-        # Text or placeholder
         display_text = self._text if self._text else self.placeholder
         text_color = self._color_text if self._text else _dim(self._color_text)
         lbl = Label(display_text, self.font, text_color)
-        lbl.render(surface, self.rect.x + 8, self.rect.y + (self.rect.height - lbl.rect.height) // 2)
+        lbl.render(surface, self.rect.x + 12, self.rect.y + (self.rect.height - lbl.rect.height) // 2)
 
-        # Cursor
         if self._focused and self._cursor_visible:
             text_w = lbl.rect.width if self._text else 0
-            cx = self.rect.x + 8 + text_w + 2
-            cy1 = self.rect.y + 6
-            cy2 = self.rect.bottom - 6
+            cx = self.rect.x + 12 + text_w + 2
+            cy1 = self.rect.y + 7
+            cy2 = self.rect.bottom - 7
             pygame.draw.line(surface, self._color_cursor, (cx, cy1), (cx, cy2), width=2)
 
 
