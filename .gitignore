@@ -8,3 +8,5 @@ models/
 *.pth
 .DS_Store
 result.json
+__pycache__/
+*.pyc
