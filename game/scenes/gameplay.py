@@ -91,6 +91,8 @@ class GameplayScene(Scene):
         self._optimal_free = None
         self._optimal_se = None
         self._show_optimal = 0
+        self._optimal_overlay_cache_key = None
+        self._optimal_overlay_surface: pygame.Surface | None = None
 
     # ========================================================================
     #  Lifecycle
@@ -197,6 +199,8 @@ class GameplayScene(Scene):
         self._optimal_free = compute_optimal_path(self._maze, require_end=False)
         self._optimal_se = compute_optimal_path(self._maze, require_end=True)
         self._show_optimal = 0
+        self._optimal_overlay_cache_key = None
+        self._optimal_overlay_surface = None
 
     def _init_ai(self) -> None:
         """Create the AI agent based on config."""
@@ -352,71 +356,66 @@ class GameplayScene(Scene):
         self._render_hud(surface)
 
     def _render_optimal_overlay(self, surface: pygame.Surface) -> None:
-        """Draw gold cell highlights + directional arrows for the optimal walk.
-
-        Rendered on top of fog so the optimal path can be seen as a hint
-        even through unexplored areas.  Alpha varies by visibility state:
-        visible > explored > unexplored.
-        """
-        result = self._optimal_free if self._show_optimal == 1 else self._optimal_se
-        if self._show_optimal == 0 or result is None:
+        """Draw cached gold highlights and path lines for the optimal walk."""
+        if self._show_optimal == 0 or self._visibility is None or self._maze is None:
             return
-        if self._visibility is None:
+
+        result = self._optimal_free if self._show_optimal == 1 else self._optimal_se
+        if result is None:
             return
 
         cs = self._cell_size
+        cache_key = (
+            self._show_optimal,
+            id(result),
+            cs,
+            self._maze.rows,
+            self._maze.cols,
+            self._visibility.version,
+        )
 
-        # ---- Pass 1: highlight visited cells ----
-        for r, c in result.visited_cells:
-            px = c * cs
-            py = r * cs
+        if self._optimal_overlay_cache_key != cache_key or self._optimal_overlay_surface is None:
+            mw = self._maze.cols * cs
+            mh = self._maze.rows * cs
+            overlay = pygame.Surface((mw, mh), pygame.SRCALPHA)
+            line_width = max(3, cs // 6)
+            half = cs // 2
 
-            if self._visibility.is_visible(r, c):
-                alpha_fill, alpha_border = 70, 120
-                color = COLOR_OPTIMAL_HIGHLIGHT
-            elif self._visibility.is_explored(r, c):
-                alpha_fill, alpha_border = 40, 75
-                color = COLOR_OPTIMAL_DIM
-            else:
-                alpha_fill, alpha_border = 18, 42
-                color = COLOR_OPTIMAL_DIM
+            for r, c in result.visited_cells:
+                if self._visibility.is_visible(r, c):
+                    alpha_fill, alpha_border = 70, 120
+                    color = COLOR_OPTIMAL_HIGHLIGHT
+                elif self._visibility.is_explored(r, c):
+                    alpha_fill, alpha_border = 40, 75
+                    color = COLOR_OPTIMAL_DIM
+                else:
+                    alpha_fill, alpha_border = 18, 42
+                    color = COLOR_OPTIMAL_DIM
 
-            overlay = pygame.Surface((cs, cs), pygame.SRCALPHA)
-            overlay.fill((*color, alpha_fill))
-            pygame.draw.rect(
-                overlay, (*COLOR_OPTIMAL_BORDER, alpha_border),
-                (0, 0, cs, cs), 1,
-            )
-            surface.blit(overlay, (px, py))
+                rect = pygame.Rect(c * cs, r * cs, cs, cs)
+                pygame.draw.rect(overlay, (*color, alpha_fill), rect)
+                pygame.draw.rect(overlay, (*COLOR_OPTIMAL_BORDER, alpha_border), rect, 1)
 
-        # ---- Pass 2: draw path lines connecting cell centers ----
-        path = result.path
-        if len(path) < 2:
-            return
+            path = result.path
+            for i in range(len(path) - 1):
+                (r1, c1), (r2, c2) = path[i], path[i + 1]
+                visible = self._visibility.is_visible(r1, c1) or self._visibility.is_visible(r2, c2)
+                explored = self._visibility.is_explored(r1, c1) or self._visibility.is_explored(r2, c2)
+                if visible:
+                    alpha = 200
+                elif explored:
+                    alpha = 120
+                else:
+                    alpha = 60
 
-        mw = self._maze.cols * cs
-        mh = self._maze.rows * cs
-        line_surf = pygame.Surface((mw, mh), pygame.SRCALPHA)
-        line_width = max(3, cs // 6)
-        half = cs // 2
+                x1, y1 = c1 * cs + half, r1 * cs + half
+                x2, y2 = c2 * cs + half, r2 * cs + half
+                pygame.draw.line(overlay, (255, 240, 180, alpha), (x1, y1), (x2, y2), line_width)
 
-        for i in range(len(path) - 1):
-            (r1, c1), (r2, c2) = path[i], path[i + 1]
+            self._optimal_overlay_surface = overlay
+            self._optimal_overlay_cache_key = cache_key
 
-            v1 = self._visibility.is_visible(r1, c1) or self._visibility.is_visible(r2, c2)
-            e1 = self._visibility.is_explored(r1, c1) or self._visibility.is_explored(r2, c2)
-            if v1:
-                alpha = 200
-            elif e1:
-                alpha = 120
-            else:
-                alpha = 60
-
-            x1, y1 = c1 * cs + half, r1 * cs + half
-            x2, y2 = c2 * cs + half, r2 * cs + half
-            pygame.draw.line(line_surf, (255, 240, 180, alpha), (x1, y1), (x2, y2), line_width)
-
-        surface.blit(line_surf, (0, 0))
+        surface.blit(self._optimal_overlay_surface, (0, 0))
 
     def _render_maze(self, surface: pygame.Surface) -> None:
         if self._maze_surface is None or self._player is None:

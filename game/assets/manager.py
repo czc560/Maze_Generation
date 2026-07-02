@@ -110,42 +110,70 @@ class AssetManager:
                 self._font_cache[cache_key] = font
                 return font
 
-        # Fall back to system font — try Chinese-capable fonts first.
-        # We test with a pure-CJK string: each Chinese glyph should render at
-        # roughly the font size in pixels.  Latin-only fallback fonts give tiny
-        # widths (tofu boxes), so we require width >= size * len / 3.
-        _CJK_TEST = "迷宫探"
-        _CJK_FONT_CANDIDATES = [
-            "wenquanyimicrohei", "notosanscjksc", "notoserifcjksc",
-            "wqymicrohei", "notosanscjk",
-            "simhei", "microsoftyahei", "arialunicode", "arial",
-        ]
-        font = None
-        for candidate in _CJK_FONT_CANDIDATES:
+        # Fall back to system fonts.  On Windows, pygame's default font usually
+        # lacks CJK glyphs, so load a real Chinese-capable font before falling
+        # back to Font(None).
+        cjk_test = "迷宫探"
+
+        def supports_cjk(font_obj: pygame.font.Font) -> bool:
             try:
-                f = pygame.font.SysFont(candidate, size)
-                test_surf = f.render(_CJK_TEST, True, (255, 255, 255))
-                # Each Chinese char should be at least size/3 pixels wide
-                min_w = max(4, size * len(_CJK_TEST) // 3)
-                if test_surf.get_width() >= min_w:
+                metrics = font_obj.metrics(cjk_test)
+                if not metrics or any(m is None for m in metrics):
+                    return False
+                return font_obj.render(cjk_test, True, (255, 255, 255)).get_width() >= size
+            except Exception:
+                return False
+
+        font = None
+        font_names = [
+            "microsoftyahei", "microsoftyaheiui", "msyh", "simhei",
+            "simsun", "nsimsun", "dengxian", "kaiti", "fangsong",
+            "arialunicode", "notosanscjksc", "notoserifcjksc",
+            "notosanscjk", "wenquanyimicrohei", "wqymicrohei",
+        ]
+        for candidate in font_names:
+            try:
+                matched = pygame.font.match_font(candidate)
+                if not matched:
+                    continue
+                f = pygame.font.Font(matched, size)
+                if supports_cjk(f):
                     font = f
                     break
             except Exception:
                 continue
 
         if font is None:
-            # Last resort: try direct .ttc path
-            _DIRECT_FONT_PATHS = [
+            direct_font_paths = [
+                r"C:\Windows\Fonts\msyh.ttc",
+                r"C:\Windows\Fonts\msyhbd.ttc",
+                r"C:\Windows\Fonts\simhei.ttf",
+                r"C:\Windows\Fonts\simsun.ttc",
+                r"C:\Windows\Fonts\Deng.ttf",
+                r"C:\Windows\Fonts\Dengb.ttf",
+                "/System/Library/Fonts/PingFang.ttc",
                 "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
                 "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
             ]
-            for fp in _DIRECT_FONT_PATHS:
+            for fp in direct_font_paths:
                 if os.path.isfile(fp):
                     try:
-                        font = pygame.font.Font(fp, size)
-                        break
+                        f = pygame.font.Font(fp, size)
+                        if supports_cjk(f):
+                            font = f
+                            break
                     except Exception:
                         continue
+
+        if font is None:
+            for candidate in font_names:
+                try:
+                    f = pygame.font.SysFont(candidate, size)
+                    if supports_cjk(f):
+                        font = f
+                        break
+                except Exception:
+                    continue
 
         if font is None:
             font = pygame.font.Font(None, size)
