@@ -9,6 +9,7 @@ from game.ui.label import Label
 from game.ui.button import Button
 from game.ui.panel import Panel
 from game.ui.backgrounds import draw_background
+from game.ui.theme import FONT_UI_BOLD, FONT_UI_LIGHT, FONT_UI_REGULAR
 
 
 class ResultsScene(Scene):
@@ -23,9 +24,9 @@ class ResultsScene(Scene):
         self._player_lost = player_lost
         self._optimal_result = optimal_result
         am = self.engine.asset_manager
-        self._font_title = am.get_font(None, 42)
-        self._font = am.get_font(None, 24)
-        self._font_small = am.get_font(None, 19)
+        self._font_title = am.get_font(FONT_UI_BOLD, 38)
+        self._font = am.get_font(FONT_UI_REGULAR, 22)
+        self._font_small = am.get_font(FONT_UI_LIGHT, 16)
         self._buttons: list[Button] = []
         self._needs_layout = True
 
@@ -35,7 +36,7 @@ class ResultsScene(Scene):
     def _layout(self, surface: pygame.Surface) -> None:
         sw, sh = surface.get_size()
         self._buttons.clear()
-        btn_w, btn_h = 200, 48
+        btn_w, btn_h = 200, 40
         bottom_y = sh - btn_h - 40
 
         self._buttons.append(Button(
@@ -113,5 +114,5 @@ class ResultsScene(Scene):
                 y += 12
 
         Label("空格/ESC/回车 → 再来一局", self._font_small, COLOR_TEXT_DIM).render_centered(
-            surface, sw // 2, sh - 90)
+            surface, sw // 2, sh - 106)
         for btn in self._buttons: btn.render(surface)

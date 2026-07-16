@@ -1,5 +1,12 @@
 # 迷宫探险者 Maze Explorer
 
+当前维护中的主实现是完整的 Pygame 游戏：入口为 `python main.py`，主代码位于
+`game/`。`solve_maze.py` 是验收 CLI，`train_dqn.py` 是可选的 DQN 训练入口。
+`tools/build_ui_assets.py` 是可选的素材重建工具。仓库仅保留当前 Pygame
+实现及其验收、训练、测试和素材构建入口。
+
+详细的模块、素材和测试边界见 [`docs/architecture.md`](docs/architecture.md)。
+
 算法课程设计 — 迷宫生成与最优资源收集路径。
 
 ## 项目结构
@@ -27,7 +34,8 @@ Maze_Generation/
 │   ├── battle/             # Boss 战规则、最优技能序列 DP
 │   ├── ui/                 # UI 组件：按钮、标签、滑块、下拉框、文本框
 │   └── assets/             # 资源管理、字体、占位图生成
-└── files (4)/              # 独立的最优路径求解器（原始交付版）
+├── tools/build_ui_assets.py  # 可选素材构建工具
+└── tests/                  # 回归、CLI 字节快照和 Pygame 冒烟测试
 ```
 
 ## 游戏功能
@@ -41,8 +49,14 @@ Maze_Generation/
 ### 运行
 
 ```bash
-pip install pygame numpy
+pip install .
 python main.py
+```
+
+DQN 功能单独安装：
+
+```bash
+pip install ".[dqn]"
 ```
 
 操作：方向键/WASD 移动、TAB 切换 AI、O 切换最优路径、Esc 暂停。
@@ -207,8 +221,12 @@ solve(boss_idx, hp_left, cds) → (min_turns, best_action)
 
 - Python ≥ 3.11
 - pygame ≥ 2.5
-- numpy ≥ 1.24（DQN 训练需要）
-- torch ≥ 2.0（DQN 训练需要，游戏可不装）
+- numpy ≥ 1.24（仅 DQN 需要）
+- torch ≥ 2.0（仅 DQN 需要，普通 Pygame 游戏不强制安装）
+- Pillow ≥ 9.0（仅素材构建脚本需要）
+
+开发环境可执行 `pip install -e ".[dev,dqn,assets]"`；只构建素材时可执行
+`pip install ".[assets]"`。全部依赖以 `pyproject.toml` 为唯一配置来源。
 
 ## 最佳防守迷宫筛选逻辑
 
@@ -226,7 +244,7 @@ solve(boss_idx, hp_left, cds) → (min_turns, best_action)
    - 到达 BOSS 的步数更长；
    - 陷阱压力更高。
 6. 对入选迷宫重新运行 `solve_maze.py --require-end`，确认文件格式、起点终点、连通性和最优路径回放合法。
-7. 基准结果写入 `maze_baseline.md`，其中“BOSS 战后最终剩余资源价值”按 Boss 战返回后的资源值统计，而不是简单复用 BOSS 战前资源。
+7. 基准结果写入 `docs/maze_baseline.md`，其中“BOSS 战后最终剩余资源价值”按 Boss 战返回后的资源值统计，而不是简单复用 BOSS 战前资源。
 
 当前提交迷宫的筛选结果：
 

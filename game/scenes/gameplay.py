@@ -25,6 +25,7 @@ from game.visibility import VisibilityManager
 from game.ui.label import Label
 from game.ui.panel import Panel
 from game.ui.backgrounds import draw_background
+from game.ui.theme import FONT_UI_BOLD, FONT_UI_LIGHT, FONT_UI_REGULAR
 
 
 class GameplayScene(Scene):
@@ -76,9 +77,9 @@ class GameplayScene(Scene):
         self._maze_render_offset = (MAZE_AREA_LEFT, MAZE_AREA_TOP)
 
         # HUD
-        self._hud_font = self._am.get_font(None, 20)
-        self._hud_font_small = self._am.get_font(None, 16)
-        self._hud_font_large = self._am.get_font(None, 26)
+        self._hud_font = self._am.get_font(FONT_UI_REGULAR, 20)
+        self._hud_font_small = self._am.get_font(FONT_UI_LIGHT, 15)
+        self._hud_font_large = self._am.get_font(FONT_UI_BOLD, 26)
         self._hud_panel = Panel(
             pygame.Rect(HUD_PANEL_X, MAZE_AREA_TOP, HUD_PANEL_WIDTH, MAZE_AREA_HEIGHT),
             color=(17, 21, 31), border_color=(82, 94, 118),
@@ -91,6 +92,8 @@ class GameplayScene(Scene):
         self._optimal_free = None
         self._optimal_se = None
         self._show_optimal = 0
+        self._optimal_overlay_cache_key = None
+        self._optimal_overlay_surface: pygame.Surface | None = None
 
     # ========================================================================
     #  Lifecycle
@@ -197,6 +200,8 @@ class GameplayScene(Scene):
         self._optimal_free = compute_optimal_path(self._maze, require_end=False)
         self._optimal_se = compute_optimal_path(self._maze, require_end=True)
         self._show_optimal = 0
+        self._optimal_overlay_cache_key = None
+        self._optimal_overlay_surface = None
 
     def _init_ai(self) -> None:
         """Create the AI agent based on config."""
@@ -352,71 +357,66 @@ class GameplayScene(Scene):
         self._render_hud(surface)
 
     def _render_optimal_overlay(self, surface: pygame.Surface) -> None:
-        """Draw gold cell highlights + directional arrows for the optimal walk.
-
-        Rendered on top of fog so the optimal path can be seen as a hint
-        even through unexplored areas.  Alpha varies by visibility state:
-        visible > explored > unexplored.
-        """
-        result = self._optimal_free if self._show_optimal == 1 else self._optimal_se
-        if self._show_optimal == 0 or result is None:
+        """Draw cached gold highlights and path lines for the optimal walk."""
+        if self._show_optimal == 0 or self._visibility is None or self._maze is None:
             return
-        if self._visibility is None:
+
+        result = self._optimal_free if self._show_optimal == 1 else self._optimal_se
+        if result is None:
             return
 
         cs = self._cell_size
+        cache_key = (
+            self._show_optimal,
+            id(result),
+            cs,
+            self._maze.rows,
+            self._maze.cols,
+            self._visibility.version,
+        )
 
-        # ---- Pass 1: highlight visited cells ----
-        for r, c in result.visited_cells:
-            px = c * cs
-            py = r * cs
+        if self._optimal_overlay_cache_key != cache_key or self._optimal_overlay_surface is None:
+            mw = self._maze.cols * cs
+            mh = self._maze.rows * cs
+            overlay = pygame.Surface((mw, mh), pygame.SRCALPHA)
+            line_width = max(3, cs // 6)
+            half = cs // 2
 
-            if self._visibility.is_visible(r, c):
-                alpha_fill, alpha_border = 70, 120
-                color = COLOR_OPTIMAL_HIGHLIGHT
-            elif self._visibility.is_explored(r, c):
-                alpha_fill, alpha_border = 40, 75
-                color = COLOR_OPTIMAL_DIM
-            else:
-                alpha_fill, alpha_border = 18, 42
-                color = COLOR_OPTIMAL_DIM
+            for r, c in result.visited_cells:
+                if self._visibility.is_visible(r, c):
+                    alpha_fill, alpha_border = 70, 120
+                    color = COLOR_OPTIMAL_HIGHLIGHT
+                elif self._visibility.is_explored(r, c):
+                    alpha_fill, alpha_border = 40, 75
+                    color = COLOR_OPTIMAL_DIM
+                else:
+                    alpha_fill, alpha_border = 18, 42
+                    color = COLOR_OPTIMAL_DIM
 
-            overlay = pygame.Surface((cs, cs), pygame.SRCALPHA)
-            overlay.fill((*color, alpha_fill))
-            pygame.draw.rect(
-                overlay, (*COLOR_OPTIMAL_BORDER, alpha_border),
-                (0, 0, cs, cs), 1,
-            )
-            surface.blit(overlay, (px, py))
+                rect = pygame.Rect(c * cs, r * cs, cs, cs)
+                pygame.draw.rect(overlay, (*color, alpha_fill), rect)
+                pygame.draw.rect(overlay, (*COLOR_OPTIMAL_BORDER, alpha_border), rect, 1)
 
-        # ---- Pass 2: draw path lines connecting cell centers ----
-        path = result.path
-        if len(path) < 2:
-            return
+            path = result.path
+            for i in range(len(path) - 1):
+                (r1, c1), (r2, c2) = path[i], path[i + 1]
+                visible = self._visibility.is_visible(r1, c1) or self._visibility.is_visible(r2, c2)
+                explored = self._visibility.is_explored(r1, c1) or self._visibility.is_explored(r2, c2)
+                if visible:
+                    alpha = 200
+                elif explored:
+                    alpha = 120
+                else:
+                    alpha = 60
 
-        mw = self._maze.cols * cs
-        mh = self._maze.rows * cs
-        line_surf = pygame.Surface((mw, mh), pygame.SRCALPHA)
-        line_width = max(3, cs // 6)
-        half = cs // 2
+                x1, y1 = c1 * cs + half, r1 * cs + half
+                x2, y2 = c2 * cs + half, r2 * cs + half
+                pygame.draw.line(overlay, (255, 240, 180, alpha), (x1, y1), (x2, y2), line_width)
 
-        for i in range(len(path) - 1):
-            (r1, c1), (r2, c2) = path[i], path[i + 1]
+            self._optimal_overlay_surface = overlay
+            self._optimal_overlay_cache_key = cache_key
 
-            v1 = self._visibility.is_visible(r1, c1) or self._visibility.is_visible(r2, c2)
-            e1 = self._visibility.is_explored(r1, c1) or self._visibility.is_explored(r2, c2)
-            if v1:
-                alpha = 200
-            elif e1:
-                alpha = 120
-            else:
-                alpha = 60
-
-            x1, y1 = c1 * cs + half, r1 * cs + half
-            x2, y2 = c2 * cs + half, r2 * cs + half
-            pygame.draw.line(line_surf, (255, 240, 180, alpha), (x1, y1), (x2, y2), line_width)
-
-        surface.blit(line_surf, (0, 0))
+        surface.blit(self._optimal_overlay_surface, (0, 0))
 
     def _render_maze(self, surface: pygame.Surface) -> None:
         if self._maze_surface is None or self._player is None:
@@ -545,11 +545,11 @@ class GameplayScene(Scene):
             Label("按 O 循环显示", self._hud_font_small, COLOR_TEXT_DIM).render(surface, x, y)
             y += 23
 
-        controls = pygame.Rect(HUD_PANEL_X + 10, MAZE_AREA_TOP + MAZE_AREA_HEIGHT - 110, HUD_PANEL_WIDTH - 20, 98)
+        controls = pygame.Rect(HUD_PANEL_X + 10, MAZE_AREA_TOP + MAZE_AREA_HEIGHT - 118, HUD_PANEL_WIDTH - 20, 106)
         pygame.draw.rect(surface, (22, 25, 34), controls, border_radius=8)
         pygame.draw.rect(surface, (72, 82, 102), controls, width=1, border_radius=8)
         Label("操作", self._hud_font, COLOR_TEXT_DIM).render(surface, controls.x + 12, controls.y + 10)
         cy = controls.y + 38
         for ctrl in ("WASD / 方向键  移动", "TAB  AI 自动", "O  最优路径", "Esc  暂停"):
             Label(ctrl, self._hud_font_small, COLOR_TEXT_DIM).render(surface, controls.x + 12, cy)
-            cy += 18
+            cy += 16

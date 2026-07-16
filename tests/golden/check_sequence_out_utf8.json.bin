@@ -1,0 +1,28 @@
+{
+  "legal": false,
+  "turns_used": 5,
+  "total_damage_dealt": 35,
+  "bosses_defeated": 1,
+  "bosses_total": 2,
+  "errors": [
+    "序列耗尽但 Boss#2 仍有 20 HP, 共击败 1/2 个Boss"
+  ],
+  "boss_details": [
+    {
+      "boss_index": 0,
+      "hp": 20,
+      "turns": 3,
+      "defeated": true
+    },
+    {
+      "boss_index": 1,
+      "hp": 35,
+      "turns": 2,
+      "defeated": false,
+      "hp_remaining": 20
+    }
+  ],
+  "is_optimal": false,
+  "optimal_turns": -1,
+  "optimal_sequence": []
+}

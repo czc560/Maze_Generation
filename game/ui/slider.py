@@ -142,8 +142,8 @@ class Slider:
 
         for i in range(6):
             x = self.track_rect.left + round(self.track_rect.width * i / 5)
-            pygame.draw.line(surface, (213, 230, 205), (x, self.track_rect.bottom + 5),
-                             (x, self.track_rect.bottom + 10), 1)
+            pygame.draw.line(surface, (213, 230, 205), (x, self.track_rect.bottom + 3),
+                             (x, self.track_rect.bottom + 6), 1)
 
         pygame.draw.rect(surface, _lighten(self._track_color, 34), rail, width=1, border_radius=rail.height // 2)
 

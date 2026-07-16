@@ -31,6 +31,7 @@ class VisibilityManager:
         self.rows = rows
         self.cols = cols
         self._asset_manager = asset_manager
+        self._version = 0
         # explored[r][c] = True if the player has ever seen this cell
         self._explored: list[list[bool]] = [
             [False for _ in range(cols)] for _ in range(rows)
@@ -43,6 +44,8 @@ class VisibilityManager:
     def update_visibility(self, center: tuple[int, int]) -> None:
         """Recompute visible cells from *center* and mark them as explored."""
         cr, cc = center
+        old_visible = set(self._visible)
+        changed = False
         self._visible.clear()
         for dr in range(-VISIBILITY_RANGE, VISIBILITY_RANGE + 1):
             for dc in range(-VISIBILITY_RANGE, VISIBILITY_RANGE + 1):
@@ -50,13 +53,21 @@ class VisibilityManager:
                     r, c = cr + dr, cc + dc
                     if 0 <= r < self.rows and 0 <= c < self.cols:
                         self._visible.add((r, c))
+                        if not self._explored[r][c]:
+                            changed = True
                         self._explored[r][c] = True
+        if changed or self._visible != old_visible:
+            self._version += 1
 
     def is_visible(self, row: int, col: int) -> bool:
         return (row, col) in self._visible
 
     def is_explored(self, row: int, col: int) -> bool:
         return self._explored[row][col]
+
+    @property
+    def version(self) -> int:
+        return self._version
 
     # ---- Fog rendering -----------------------------------------------------
 
@@ -99,3 +110,4 @@ class VisibilityManager:
             [False for _ in range(self.cols)] for _ in range(self.rows)
         ]
         self._visible.clear()
+        self._version += 1

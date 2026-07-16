@@ -8,6 +8,7 @@ from game.scenes.base import Scene
 from game.constants import COLOR_TEXT, COLOR_TEXT_DIM
 from game.ui.button import Button
 from game.ui.label import Label
+from game.ui.theme import FONT_UI_LIGHT, FONT_UI_REGULAR
 
 
 class MainMenuScene(Scene):
@@ -16,10 +17,10 @@ class MainMenuScene(Scene):
     def __init__(self, manager) -> None:
         super().__init__(manager)
         am = self.engine.asset_manager
-        self._title_font = am.get_font(None, 70)
-        self._subtitle_font = am.get_font(None, 24)
-        self._btn_font = am.get_font(None, 28)
-        self._meta_font = am.get_font(None, 17)
+        self._title_font = am.get_font(FONT_UI_LIGHT, 70)
+        self._subtitle_font = am.get_font(FONT_UI_REGULAR, 24)
+        self._btn_font = am.get_font(FONT_UI_REGULAR, 28)
+        self._meta_font = am.get_font(FONT_UI_LIGHT, 17)
         self._title = Label("Maze Explorer", self._title_font, COLOR_TEXT)
         self._subtitle = Label("迷宫探险者", self._subtitle_font, (229, 238, 245))
         self._buttons: list[Button] = []

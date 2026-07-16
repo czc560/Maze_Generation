@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 from game.maze.symbols import SYMBOLS, COIN_VALUE, TRAP_VALUE
-from game.maze.pathfinding import bfs_path, distance_to_end_map
 
 
 @dataclass
@@ -18,9 +17,9 @@ class ProbeState:
 
 
 def _scan_visible(maze, pos, collected_coins, triggered_traps) -> dict:
-    """Scan 3×3 around *pos*. Returns {'coins':set, 'traps':set, 'end':bool}."""
+    """Scan 3×3 around *pos*."""
     pr, pc = pos
-    result = {'coins': set(), 'traps': set(), 'end': False}
+    result = {'coins': set(), 'traps': set(), 'ends': set(), 'end': False}
     for dr in (-1, 0, 1):
         for dc in (-1, 0, 1):
             nr, nc = pr + dr, pc + dc
@@ -34,6 +33,7 @@ def _scan_visible(maze, pos, collected_coins, triggered_traps) -> dict:
             elif ct == SYMBOLS["trap"] and (nr, nc) not in triggered_traps:
                 result['traps'].add((nr, nc))
             elif ct == SYMBOLS["end"]:
+                result['ends'].add((nr, nc))
                 result['end'] = True
     return result
 
@@ -47,7 +47,7 @@ class SimpleGreedy:
 
     Scoring per neighbor:
       - distance to visible coins/traps (weighted)
-      - progress toward end
+      - visible end proximity
     """
 
     def __init__(self, maze, coin_weight=1.2, trap_weight=0.8, end_weight=1.6, seed=None):
@@ -64,7 +64,6 @@ class SimpleGreedy:
         self.resources = 0
         self.collected_coins: set = set()
         self.triggered_traps: set = set()
-        self.dist_to_end = distance_to_end_map(maze)
 
     def is_finished(self) -> bool:
         return self.position == self.maze.end
@@ -78,21 +77,20 @@ class SimpleGreedy:
             return ProbeState(self.position, self.steps, self.resources)
 
         visible = _scan_visible(self.maze, self.position, self.collected_coins, self.triggered_traps)
-        path = bfs_path(self.maze, self.position, self.maze.end)
-        if len(path) >= 2:
-            best = path[1]
-            adjacent_coins = [n for n in neighbors if n in visible['coins']]
-            if adjacent_coins and self.dist_to_end.get(adjacent_coins[0], 9999) <= self.dist_to_end.get(best, 9999) + 2:
-                best = max(adjacent_coins, key=lambda n: self._score(n, visible))
-        else:
-            best = max(neighbors, key=lambda n: self._score(n, visible))
+        best = self._choose_best(neighbors, visible)
         self.position = best
         self.steps += 1
         self._collect(best)
         return ProbeState(self.position, self.steps, self.resources)
 
+    def _choose_best(self, neighbors, visible):
+        scores = [(self._score(n, visible), n) for n in neighbors]
+        best_score = max(score for score, _ in scores)
+        best_cells = [cell for score, cell in scores if score == best_score]
+        return self.rng.choice(best_cells)
+
     def _score(self, cell, visible):
-        s = -self.dist_to_end.get(cell, 9999) * self.end_weight * 0.3
+        s = 0.0
         if cell in visible['coins']:
             s += self.coin_weight * COIN_VALUE
         elif cell in visible['traps']:
@@ -103,8 +101,8 @@ class SimpleGreedy:
         for t in visible['traps']:
             d = abs(cell[0]-t[0]) + abs(cell[1]-t[1])
             if d > 0: s -= self.trap_weight * abs(TRAP_VALUE) / (d * 2)
-        if visible['end']:
-            ed = abs(cell[0]-self.maze.end[0]) + abs(cell[1]-self.maze.end[1])
+        for end in visible['ends']:
+            ed = abs(cell[0]-end[0]) + abs(cell[1]-end[1])
             s += self.end_weight * 20.0 / max(1, ed)
         return s
 
@@ -150,7 +148,6 @@ class MemoryGreedy:
         self.collected_coins: set = set()
         self.triggered_traps: set = set()
         self.visited: dict[tuple[int, int], int] = {maze.start: 1}
-        self.dist_to_end = distance_to_end_map(maze)
 
     def is_finished(self) -> bool:
         return self.position == self.maze.end
@@ -164,23 +161,22 @@ class MemoryGreedy:
             return ProbeState(self.position, self.steps, self.resources)
 
         visible = _scan_visible(self.maze, self.position, self.collected_coins, self.triggered_traps)
-        path = bfs_path(self.maze, self.position, self.maze.end)
-        if len(path) >= 2:
-            best = path[1]
-            adjacent_coins = [n for n in neighbors if n in visible['coins']]
-            if adjacent_coins and self.dist_to_end.get(adjacent_coins[0], 9999) <= self.dist_to_end.get(best, 9999) + 2:
-                best = max(adjacent_coins, key=lambda n: self._score(n, visible))
-        else:
-            best = max(neighbors, key=lambda n: self._score(n, visible))
+        best = self._choose_best(neighbors, visible)
         self.position = best
         self.steps += 1
         self.visited[best] = self.visited.get(best, 0) + 1
         self._collect(best)
         return ProbeState(self.position, self.steps, self.resources)
 
+    def _choose_best(self, neighbors, visible):
+        scores = [(self._score(n, visible), n) for n in neighbors]
+        best_score = max(score for score, _ in scores)
+        best_cells = [cell for score, cell in scores if score == best_score]
+        return self.rng.choice(best_cells)
+
     def _score(self, cell, visible):
         # Base score — same as SimpleGreedy
-        s = -self.dist_to_end.get(cell, 9999) * self.end_weight * 0.3
+        s = 0.0
         if cell in visible['coins']:
             s += self.coin_weight * COIN_VALUE
         elif cell in visible['traps']:
@@ -191,8 +187,8 @@ class MemoryGreedy:
         for t in visible['traps']:
             d = abs(cell[0]-t[0]) + abs(cell[1]-t[1])
             if d > 0: s -= self.trap_weight * abs(TRAP_VALUE) / (d * 2)
-        if visible['end']:
-            ed = abs(cell[0]-self.maze.end[0]) + abs(cell[1]-self.maze.end[1])
+        for end in visible['ends']:
+            ed = abs(cell[0]-end[0]) + abs(cell[1]-end[1])
             s += self.end_weight * 20.0 / max(1, ed)
 
         # ===== VISITED MEMORY (the key difference) =====

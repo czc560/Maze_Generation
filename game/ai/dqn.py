@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from game.maze.symbols import SYMBOLS, COIN_VALUE, TRAP_VALUE
-from game.maze.pathfinding import distance_to_end_map
 
 try:
     import numpy as np
@@ -23,6 +22,8 @@ except ImportError:
     torch: Any = None  # type: ignore[no-redef]
     nn: Any = None  # type: ignore[no-redef]
     optim: Any = None  # type: ignore[no-redef]
+
+_NNModuleBase = nn.Module if HAS_TORCH else object
 
 _DIRECTIONS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 _CELL_ENCODING = {"#": 0, ".": 1, "S": 2, "E": 3, "B": 4, "C": 5, "T": 6}
@@ -46,7 +47,7 @@ def _step_position(pos, action):
 #  Q-Network
 # ============================================================================
 
-class _QNetwork(nn.Module):
+class _QNetwork(_NNModuleBase):
     def __init__(self, input_dim=31, hidden_dim=128, num_actions=4):
         super().__init__()
         self.net = nn.Sequential(
@@ -113,8 +114,6 @@ class DQNAI:
         self.resources = 0
         self.collected_coins: set = set()
         self.triggered_traps: set = set()
-        self.dist_to_end = distance_to_end_map(maze)
-        self.max_dist = max(self.dist_to_end.values()) if self.dist_to_end else 1
         self._max_steps = maze.rows * maze.cols * 3
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -161,8 +160,7 @@ class DQNAI:
                 features.append(1.0 if (0 <= nr < self.maze.rows and 0 <= nc < self.maze.cols
                                         and self.maze.grid[nr][nc].content == SYMBOLS["trap"]
                                         and (nr, nc) not in self.triggered_traps) else 0.0)
-        ed = self.dist_to_end.get(pos, self.max_dist)
-        features.append(ed / max(1, self.max_dist))
+        features.append(0.0)
         features.append(self.resources / max(1, abs(self.resources) + 50))
         features.append(min(1.0, self.steps / max(1, self._max_steps)))
         features.append(1.0)
@@ -180,8 +178,7 @@ class DQNAI:
 #  Training
 # ============================================================================
 
-def _build_state_global(maze, pos, collected, triggered, steps, resources,
-                        dist_to_end, max_dist, max_steps):
+def _build_state_global(maze, pos, collected, triggered, steps, resources, max_steps):
     features = []
     r, c = pos
     for dr in (-1, 0, 1):
@@ -197,8 +194,7 @@ def _build_state_global(maze, pos, collected, triggered, steps, resources,
             features.append(1.0 if (0 <= nr < maze.rows and 0 <= nc < maze.cols
                                     and maze.grid[nr][nc].content == SYMBOLS["trap"]
                                     and (nr, nc) not in triggered) else 0.0)
-    ed = dist_to_end.get(pos, max_dist)
-    features.append(ed / max(1, max_dist))
+    features.append(0.0)
     features.append(resources / max(1, abs(resources) + 50))
     features.append(min(1.0, steps / max(1, max_steps)))
     features.append(1.0)
@@ -238,14 +234,12 @@ def train_dqn(
                              generation_method="mst", coin_strategy=cs, trap_strategy=ts)
         pos = maze.start
         collected, triggered = set(), set()
-        d2e = distance_to_end_map(maze)
-        max_d = max(d2e.values()) if d2e else 1
         max_s = maze_rows * maze_cols * 3
         steps, resources, total_r = 0, 0, 0.0
 
         while pos != maze.end and steps < max_s:
             state = _build_state_global(maze, pos, collected, triggered,
-                                        steps, resources, d2e, max_d, max_s)
+                                        steps, resources, max_s)
             valid = _valid_moves(maze, pos)
             if not valid:
                 break
@@ -264,14 +258,12 @@ def train_dqn(
                 reward += COIN_VALUE; resources += COIN_VALUE; collected.add(npos)
             elif ct == SYMBOLS["trap"] and npos not in triggered:
                 reward += TRAP_VALUE; resources += TRAP_VALUE; triggered.add(npos)
-            prev_d = d2e.get(pos, max_d)
-            new_d = d2e.get(npos, max_d)
-            reward += 1.0 if new_d < prev_d else -0.5
+            reward -= 0.1
             done = (npos == maze.end)
             if done:
                 reward += 100.0
             ns = _build_state_global(maze, npos, collected, triggered,
-                                     steps, resources, d2e, max_d, max_s)
+                                     steps, resources, max_s)
             replay.push(state, action, reward, ns, float(done))
             total_r += reward; pos = npos
 

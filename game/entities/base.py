@@ -6,6 +6,10 @@ import pygame
 
 from game.assets.manager import AssetManager
 from game.entities.animation import MoveAnimation
+from game.constants import ASSET_BOSS, ASSET_COIN, ASSET_END, ASSET_FLOOR, ASSET_START
+
+
+_FLOOR_BACKED_KEYS = {ASSET_COIN, ASSET_START, ASSET_END, ASSET_BOSS}
 
 
 class Entity(pygame.sprite.Sprite):
@@ -71,7 +75,14 @@ class Entity(pygame.sprite.Sprite):
 
     def _load_image(self) -> None:
         size = (self.cell_size, self.cell_size)
-        self.image = self._asset_manager.get_image(self.asset_key, size)
+        if self.asset_key in _FLOOR_BACKED_KEYS:
+            floor = self._asset_manager.get_image(ASSET_FLOOR, size)
+            icon_size = max(4, int(self.cell_size * 0.78))
+            icon = self._asset_manager.get_image(self.asset_key, (icon_size, icon_size))
+            self.image = floor.copy()
+            self.image.blit(icon, icon.get_rect(center=self.image.get_rect().center))
+        else:
+            self.image = self._asset_manager.get_image(self.asset_key, size)
         self.rect = self.image.get_rect()
         self._sync_rect()
 

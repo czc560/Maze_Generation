@@ -4,7 +4,16 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 models/
 *.pth
 .DS_Store
 result.json
+output.json
+output_optimal.json
+mst.json
+backtracking.json
+divide_conquer.json
+branch_bound.json

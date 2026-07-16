@@ -1,0 +1,5 @@
+迷宫已生成: 15×15  seed=42  k=4.0  算法=branch_bound
+  起点: [13, 13]  终点: [1, 5]
+  Boss: [1, 6]
+  金币: 13  陷阱: 6
+  → C:\Users\35047\Desktop\Maze_Generation-master\Maze_Generation-master\branch_bound.json

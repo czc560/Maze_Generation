@@ -1,7 +1,46 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "maze-generation"
 version = "0.1.0"
-description = "Add your description here"
+description = "Maze Explorer Pygame game and maze validation CLI"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["pygame>=2.5", "torch>=2.0", "numpy>=1.24"]
+dependencies = ["pygame>=2.5"]
+
+[project.optional-dependencies]
+dqn = ["numpy>=1.24", "torch>=2.0"]
+assets = ["Pillow>=9.0"]
+dev = [
+  "mypy>=1.8",
+  "pytest>=8.0",
+  "ruff>=0.4",
+]
+
+[project.scripts]
+maze-explorer = "main:main"
+maze-solve = "solve_maze:main"
+maze-train-dqn = "train_dqn:main"
+
+[tool.setuptools]
+py-modules = ["main", "solve_maze", "train_dqn"]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["game*"]
+
+[tool.setuptools.package-data]
+"game.assets" = ["sprites/*", "sounds/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["tools"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

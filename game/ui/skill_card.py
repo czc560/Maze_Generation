@@ -14,8 +14,8 @@ class SkillCard:
     - Cooldown status (ready / turns remaining)
     """
 
-    CARD_WIDTH = 128
-    CARD_HEIGHT = 92
+    CARD_WIDTH = 148
+    CARD_HEIGHT = 102
 
     def __init__(
         self,
@@ -85,11 +85,11 @@ class SkillCard:
         pygame.draw.rect(surface, (117, 82, 48), self.rect, width=3, border_radius=10)
         pygame.draw.rect(surface, (255, 246, 203), self.rect.inflate(-10, -10), width=1, border_radius=7)
 
-        top_band = pygame.Rect(self.rect.x + 6, self.rect.y + 6, self.rect.width - 12, 18)
+        top_band = pygame.Rect(self.rect.x + 6, self.rect.y + 6, self.rect.width - 12, 20)
         pygame.draw.rect(surface, accent, top_band, border_radius=6)
         pygame.draw.rect(surface, (255, 255, 255), (top_band.x + 6, top_band.y + 3, top_band.width - 12, 2), border_radius=1)
 
-        badge = pygame.Rect(self.rect.x + 10, self.rect.y + 30, 34, 34)
+        badge = pygame.Rect(self.rect.x + 12, self.rect.y + 34, 34, 34)
         pygame.draw.ellipse(surface, (80, 59, 42), badge.inflate(4, 4))
         pygame.draw.ellipse(surface, accent, badge)
         pygame.draw.ellipse(surface, (255, 246, 214), badge.inflate(-10, -10))
@@ -97,11 +97,11 @@ class SkillCard:
         surface.blit(idx_surf, idx_surf.get_rect(center=badge.center))
 
         name_surf = self.small_font.render(f"技能 {self.index + 1}", True, (54, 49, 38))
-        surface.blit(name_surf, (self.rect.x + 52, self.rect.y + 31))
+        surface.blit(name_surf, (self.rect.x + 56, self.rect.y + 33))
         dmg_surf = self.font.render(str(self.damage), True, (132, 50, 42))
-        surface.blit(dmg_surf, (self.rect.x + 52, self.rect.y + 49))
+        surface.blit(dmg_surf, (self.rect.x + 56, self.rect.y + 53))
         dmg_label = self.small_font.render("伤害", True, (93, 78, 58))
-        surface.blit(dmg_label, (self.rect.x + 84, self.rect.y + 53))
+        surface.blit(dmg_label, (self.rect.x + 94, self.rect.y + 58))
 
         if self._cooldown_remaining > 0:
             cd_text = f"冷却 {self._cooldown_remaining}"
@@ -116,7 +116,7 @@ class SkillCard:
             cd_text = "可释放"
             cd_color = (38, 116, 63)
 
-        status_rect = pygame.Rect(self.rect.x + 10, self.rect.bottom - 24, self.rect.width - 20, 18)
+        status_rect = pygame.Rect(self.rect.x + 12, self.rect.bottom - 25, self.rect.width - 24, 18)
         pygame.draw.rect(surface, (255, 250, 221) if ready else (94, 72, 62), status_rect, border_radius=6)
         pygame.draw.rect(surface, accent if ready else (129, 95, 82), status_rect, width=1, border_radius=6)
         cd_surf = self.small_font.render(cd_text, True, cd_color)

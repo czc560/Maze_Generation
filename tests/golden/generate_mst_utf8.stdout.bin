@@ -1,0 +1,5 @@
+迷宫已生成: 15×15  seed=42  k=4.0  算法=mst
+  起点: [5, 1]  终点: [3, 1]
+  Boss: [3, 2]
+  金币: 15  陷阱: 7
+  → C:\Users\35047\Desktop\Maze_Generation-master\Maze_Generation-master\mst.json

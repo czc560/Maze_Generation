@@ -469,6 +469,18 @@ def _optimal_skill_dp_continuous(
     return seq
 
 
+def optimal_skill_sequence(
+    boss_hp_list: list[int],
+    player_skills: list[list[int]],
+) -> list[int]:
+    """Return the minimum-turn sequence for a continuous Boss gauntlet.
+
+    This public compatibility wrapper keeps the established continuous-cooldown
+    behavior while allowing callers to avoid importing a private helper.
+    """
+    return _optimal_skill_dp_continuous(boss_hp_list, player_skills)
+
+
 def check_sequence_optimality(
     boss_hp_list: list[int],
     player_skills: list[list[int]],
@@ -497,7 +509,7 @@ def check_sequence_optimality(
         }
 
     # ---- 2. Compute optimal with continuous DP (cooldowns persist) -----------
-    optimal_seq = _optimal_skill_dp_continuous(boss_hp_list, player_skills)
+    optimal_seq = optimal_skill_sequence(boss_hp_list, player_skills)
     total_optimal_turns = len(optimal_seq)
 
     # ---- 3. Annotate boss_details with per-boss optimal (from continuous) ----

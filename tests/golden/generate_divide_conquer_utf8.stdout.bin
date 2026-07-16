@@ -1,0 +1,5 @@
+迷宫已生成: 15×15  seed=42  k=4.0  算法=divide_conquer
+  起点: [9, 5]  终点: [1, 13]
+  Boss: [1, 12]
+  金币: 15  陷阱: 7
+  → C:\Users\35047\Desktop\Maze_Generation-master\Maze_Generation-master\divide_conquer.json

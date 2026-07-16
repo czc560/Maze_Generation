@@ -15,6 +15,7 @@ from game.ui.dropdown import Dropdown
 from game.ui.text_input import TextInput
 from game.ui.panel import Panel
 from game.ui.backgrounds import draw_background
+from game.ui.theme import FONT_UI_BOLD, FONT_UI_LIGHT, FONT_UI_REGULAR
 
 ALGORITHM_OPTIONS = ["mst", "backtracking", "divide_conquer", "branch_bound"]
 ALGORITHM_LABELS = {"mst": "最小生成树 Prim", "backtracking": "回溯法 DFS",
@@ -33,10 +34,10 @@ class MazeConfigScene(Scene):
     def __init__(self, manager) -> None:
         super().__init__(manager)
         am = self.engine.asset_manager
-        self._font = am.get_font(None, 28)
-        self._font_small = am.get_font(None, 20)
-        self._font_tiny = am.get_font(None, 16)
-        self._font_title = am.get_font(None, 40)
+        self._font = am.get_font(FONT_UI_REGULAR, 26)
+        self._font_small = am.get_font(FONT_UI_REGULAR, 18)
+        self._font_tiny = am.get_font(FONT_UI_LIGHT, 12)
+        self._font_title = am.get_font(FONT_UI_BOLD, 36)
 
         self._rows = DEFAULT_ROWS
         self._cols = DEFAULT_COLS
@@ -80,7 +81,7 @@ class MazeConfigScene(Scene):
         self._preview_panel = Panel(pygame.Rect(preview_x, py, preview_w, preview_h),
                                     color=(20, 32, 30), border_color=(130, 169, 94), border_width=2)
         lx = px + 28
-        ly = py + 92
+        ly = py + 106
         self._content_x = lx
 
         self._sliders.append(Slider(pygame.Rect(lx, ly, col_w, 18), "行数", self._font_small,
@@ -88,13 +89,13 @@ class MazeConfigScene(Scene):
                                      on_change=lambda v: setattr(self, '_rows', int(v)),
                                      track_color=(42, 69, 78), fill_color=(255, 206, 92),
                                      handle_color=(255, 244, 197), text_color=(226, 244, 239)))
-        ly += 58
+        ly += 54
         self._sliders.append(Slider(pygame.Rect(lx, ly, col_w, 18), "列数", self._font_small,
                                      5, 51, 2, self._cols,
                                      on_change=lambda v: setattr(self, '_cols', int(v)),
                                      track_color=(42, 69, 78), fill_color=(136, 222, 160),
                                      handle_color=(232, 255, 226), text_color=(226, 244, 239)))
-        ly += 72
+        ly += 66
 
         self._algo_label_pos = (lx, ly)
         algo_names = [ALGORITHM_LABELS[a] for a in ALGORITHM_OPTIONS]
@@ -104,7 +105,7 @@ class MazeConfigScene(Scene):
                               color_bg=(32, 58, 64), color_hover=(48, 86, 92),
                               color_selected=(83, 122, 92), text_color=(238, 250, 223))
         self._widgets.append(self._algo)
-        ly += 92
+        ly += 86
 
         self._seed_label_pos = (lx, ly)
         self._seed_input = TextInput(pygame.Rect(lx, ly + 26, col_w - 96, 34), self._font_small,
@@ -115,7 +116,7 @@ class MazeConfigScene(Scene):
         self._buttons.append(Button(pygame.Rect(lx + col_w - 86, ly + 26, 86, 34), "随机",
                                     self._font_small, callback=self._randomize_seed,
                                     color_normal=(79, 105, 128), color_hover=(96, 128, 156)))
-        ly += 84
+        ly += 102
 
         self._sliders.append(Slider(pygame.Rect(lx, ly, col_w, 18), "目标分数 k", self._font_small,
                                      0.5, 8.0, 0.1, self._k,

@@ -1,0 +1,6 @@
+── 计算最优序列: input.json ──
+  Boss数: 2  最优回合: 8
+  序列: [0, 1, 0, 0, 1, 0, 0, 1]
+  自检: legal=True  damage=55  击败=2/2
+  → 已写入: C:\Users\35047\Desktop\Maze_Generation-master\Maze_Generation-master\input_optimal.json
+{"B": [20, 35], "PlayerSkills": [[5, 0], [10, 2]], "SkillSequence": [0, 1, 0, 0, 1, 0, 0, 1]}

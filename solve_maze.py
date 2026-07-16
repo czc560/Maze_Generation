@@ -39,7 +39,7 @@ from game.maze.optimal_path import (
     export_game_maze_json,
     game_maze_to_grid,
 )
-from game.battle.rules import check_sequence_optimality, _optimal_skill_dp_continuous
+from game.battle.rules import check_sequence_optimality, optimal_skill_sequence
 
 
 def solve_one(path: str, out_path: str | None = None, require_end: bool = False) -> int:
@@ -222,7 +222,7 @@ def cmd_optimal_sequence(args) -> int:
     PlayerSkills: list[list[int]] = data["PlayerSkills"]
 
     # Compute optimal
-    opt_seq = _optimal_skill_dp_continuous(B, PlayerSkills)
+    opt_seq = optimal_skill_sequence(B, PlayerSkills)
 
     # Build output
     out_data = {"B": B, "PlayerSkills": PlayerSkills, "SkillSequence": opt_seq}

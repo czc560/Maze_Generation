@@ -15,6 +15,7 @@ from game.ui.label import Label
 from game.ui.button import Button
 from game.ui.skill_card import SkillCard
 from game.ui.backgrounds import draw_background
+from game.ui.theme import FONT_UI_BOLD, FONT_UI_LIGHT, FONT_UI_REGULAR
 
 
 SKILL_COLORS = [
@@ -59,9 +60,10 @@ class BossBattleScene(Scene):
 
         self._skill_cards: list[SkillCard] = []
         self._am = self.engine.asset_manager
-        self._font = self._am.get_font(None, 24)
-        self._font_small = self._am.get_font(None, 18)
-        self._font_large = self._am.get_font(None, 36)
+        self._font = self._am.get_font(FONT_UI_REGULAR, 24)
+        self._font_small = self._am.get_font(FONT_UI_LIGHT, 18)
+        self._font_card = self._am.get_font(FONT_UI_LIGHT, 16)
+        self._font_large = self._am.get_font(FONT_UI_BOLD, 36)
 
         self._anim_state = "intro"
         self._anim_timer = 1.5
@@ -103,7 +105,7 @@ class BossBattleScene(Scene):
             self._bosses_revealed = [True] * len(self._boss_hp_list)
         self._battle_log = ["Boss战开始！"]
         self._skill_cards = [
-            SkillCard(i, dmg, cd, self._font, self._font_small)
+            SkillCard(i, dmg, cd, self._font, self._font_card)
             for i, (dmg, cd) in enumerate(self._skills_data)
         ]
         for card in self._skill_cards:
@@ -479,26 +481,32 @@ class BossBattleScene(Scene):
             self._render_choose(surface, sw, sh)
             return
 
-        boss_area = pygame.Rect(80, 60, sw - 160, sh // 3)
+        boss_area = pygame.Rect(80, 52, sw - 160, sh // 3)
         pygame.draw.rect(surface, (255, 246, 220), boss_area, border_radius=12)
         pygame.draw.rect(surface, (113, 153, 76), boss_area, width=2, border_radius=12)
         self._render_combatants(surface, boss_area)
         self._render_boss_status(surface, boss_area)
         self._render_skill_effects(surface)
 
-        bar_rect = pygame.Rect(boss_area.left + 20, boss_area.bottom + 10, boss_area.width - 40, 12)
+        round_panel = pygame.Rect(boss_area.left + 120, boss_area.bottom + 10,
+                                  boss_area.width - 240, 54)
+        pygame.draw.rect(surface, (45, 54, 43), round_panel, border_radius=10)
+        pygame.draw.rect(surface, (126, 156, 91), round_panel, width=2, border_radius=10)
+        bar_rect = pygame.Rect(round_panel.left + 18, round_panel.top + 10,
+                               round_panel.width - 36, 10)
         self._render_round_bar(surface, bar_rect)
 
-        cards_y = bar_rect.bottom + 42
-        total_cw = len(self._skill_cards) * SkillCard.CARD_WIDTH + (len(self._skill_cards) - 1) * 12
+        cards_y = round_panel.bottom + 16
+        card_gap = 14
+        total_cw = len(self._skill_cards) * SkillCard.CARD_WIDTH + (len(self._skill_cards) - 1) * card_gap
         cards_x = (sw - total_cw) // 2
         for i, card in enumerate(self._skill_cards):
-            card.render(surface, cards_x + i * (SkillCard.CARD_WIDTH + 12), cards_y)
+            card.render(surface, cards_x + i * (SkillCard.CARD_WIDTH + card_gap), cards_y)
             if self._last_skill_idx == i and self._impact_flash > 0:
                 pygame.draw.rect(surface, SKILL_COLORS[i % len(SKILL_COLORS)], card.rect.inflate(6, 6), width=2, border_radius=8)
 
-        action_y = cards_y + SkillCard.CARD_HEIGHT + 22
-        action_panel = pygame.Rect(sw // 2 - 360, action_y, 720, 42)
+        action_y = cards_y + SkillCard.CARD_HEIGHT + 18
+        action_panel = pygame.Rect(sw // 2 - 380, action_y, 760, 44)
         pygame.draw.rect(surface, (255, 248, 214), action_panel, border_radius=8)
         pygame.draw.rect(surface, (108, 143, 76), action_panel, width=2, border_radius=8)
         latest = self._battle_log[-1] if self._battle_log else "准备战斗"
@@ -624,7 +632,8 @@ class BossBattleScene(Scene):
         mode = "自动" if self._auto_battle else "手动"
         Label(f"总回合: {self._rounds_used}/{self._round_limit}  |  当前Boss: {self._boss_round}  |  "
               f"金币: {self._coin_total}  |  {mode}模式",
-              self._font_small, COLOR_TEXT).render_centered(surface, bar_rect.centerx, bar_rect.bottom + 12)
+              self._font_small, (242, 239, 210)).render_centered(
+                  surface, bar_rect.centerx, bar_rect.bottom + 15)
 
     def _render_skill_effects(self, surface: pygame.Surface) -> None:
         for effect in self._skill_effects:
@@ -654,4 +663,11 @@ class BossBattleScene(Scene):
         overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 150))
         surface.blit(overlay, (0, 0))
-        Label(text, self._font_large, color).render_centered(surface, sw // 2, sh // 2)
+        panel = pygame.Rect(sw // 2 - 235, sh // 2 - 62, 470, 124)
+        pygame.draw.rect(surface, (35, 31, 38), panel, border_radius=14)
+        pygame.draw.rect(surface, color, panel, width=2, border_radius=14)
+        pygame.draw.line(surface, (115, 105, 104),
+                         (panel.left + 70, panel.centery + 29),
+                         (panel.right - 70, panel.centery + 29), 1)
+        Label(text, self._font_large, color).render_centered(
+            surface, panel.centerx, panel.centery - 5)

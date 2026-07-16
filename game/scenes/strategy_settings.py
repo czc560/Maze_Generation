@@ -11,6 +11,7 @@ from game.ui.label import Label
 from game.ui.text_input import TextInput
 from game.ui.panel import Panel
 from game.ui.backgrounds import draw_background
+from game.ui.theme import FONT_UI_BOLD, FONT_UI_LIGHT, FONT_UI_REGULAR
 
 ALGO_OPTIONS = ["simple_greedy", "memory_greedy", "dqn"]
 ALGO_LABELS = {"simple_greedy": "SimpleGreedy", "memory_greedy": "MemoryGreedy", "dqn": "DQN"}
@@ -41,9 +42,9 @@ class StrategySettingsScene(Scene):
     def __init__(self, manager) -> None:
         super().__init__(manager)
         am = self.engine.asset_manager
-        self._font = am.get_font(None, 22)
-        self._font_mono = am.get_font(None, 19)
-        self._font_title = am.get_font(None, 32)
+        self._font = am.get_font(FONT_UI_REGULAR, 22)
+        self._font_mono = am.get_font(FONT_UI_LIGHT, 19)
+        self._font_title = am.get_font(FONT_UI_BOLD, 32)
 
         cfg = getattr(self.engine, 'strategy_config', {})
         self._algo = cfg.get("ai_strategy", "memory_greedy")

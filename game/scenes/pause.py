@@ -7,6 +7,7 @@ from game.scenes.base import Scene
 from game.constants import COLOR_ACCENT
 from game.ui.label import Label
 from game.ui.button import Button
+from game.ui.theme import FONT_UI_BOLD, FONT_UI_REGULAR
 
 
 class PauseScene(Scene):
@@ -15,8 +16,8 @@ class PauseScene(Scene):
     def __init__(self, manager) -> None:
         super().__init__(manager)
         am = self.engine.asset_manager
-        self._font = am.get_font(None, 36)
-        self._font_btn = am.get_font(None, 24)
+        self._font = am.get_font(FONT_UI_BOLD, 36)
+        self._font_btn = am.get_font(FONT_UI_REGULAR, 24)
         self._buttons: list[Button] = []
         self._needs_layout = True
 

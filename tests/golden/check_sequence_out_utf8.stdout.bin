@@ -1,0 +1,8 @@
+── 检查序列最优性: input.json ──
+  Boss数: 2  击败: 1
+  使用回合: 5  理论最优: -1
+  合法: ❌  最优: ❌
+    ⚠ 序列耗尽但 Boss#2 仍有 20 HP, 共击败 1/2 个Boss
+  Boss#1 HP=20  实际=3回合  最优=?回合  ✅ 击败
+  Boss#2 HP=35  实际=2回合  最优=?回合  ❌ 未击败
+  → 已写入: C:\Users\35047\Desktop\Maze_Generation-master\Maze_Generation-master\result.json
